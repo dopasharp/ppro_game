@@ -11,15 +11,19 @@ const images={};for(const name of ['cream','pink','pepero']){const i=new Image()
 const garland=new Image();garland.src='./assets/ribbon-garland.png';
 const animation={left:{taps:0,at:-Infinity},right:{taps:0,at:-Infinity}};
 function pose(player,taps,time){const a=animation[player];if(a.taps!==taps){a.taps=taps;a.at=time;}return bitePose(time-a.at);}
-const initials=()=>({left:$('my-initial').value.trim().toUpperCase().slice(0,6),right:$('partner-initial').value.trim().toUpperCase().slice(0,6)});
+const initials=()=>({left:$('my-initial').value.trim().slice(0,12),right:$('partner-initial').value.trim().slice(0,12)});
 let noticeTimer;
 let seatKeys=null,controlsSeat=true;
 let wallEdge=null,wallUntil=0;
 function notify(message){clearTimeout(noticeTimer);$('notice').textContent=message;$('notice').hidden=false;noticeTimer=setTimeout(()=>$('notice').hidden=true,5000);}
-function copiedNotice(copied){notify(copied?'링크가 복사되었습니다. 상대에게 공유해주세요!':'브라우저에서 복사를 허용하지 않았어요. 상단 링크 다시 복사 버튼을 눌러주세요.');}
+function copiedNotice(copied){notify(copied?'링크가 복사되었습니다. 상대에게 공유해주세요!':'브라우저에서 복사를 허용하지 않았어요. 하단의 해당 자리 링크 복사 버튼을 눌러주세요.');}
 function invitationURL(id=roomId,seat='right'){return roomLink(location.href,id,seat,seatKeys?.[seat]);}
 async function copyInvite(seat='right'){const copied=await writeLink(invitationURL(roomId,seat));if(copied)notify(`${seat==='left'?'왼쪽':'오른쪽'} 링크가 복사되었습니다.${seat==='right'?' 상대에게 공유해주세요!':' 내 자리로 돌아올 때 사용해주세요.'}`);else copiedNotice(false);}
 function createRoom(mode){
+  for(const id of ['my-initial','partner-initial']){
+    const input=$(id);input.value=input.value.trim();
+    if(!input.reportValidity())return;
+  }
   const id=newRoom();seatKeys={left:newRoom(),right:newRoom()};
   const copying=writeLink(invitationURL(id));
   return enter(id,true,mode,copying);
@@ -28,6 +32,17 @@ function createRoom(mode){
 const now=()=>Date.now()+offset;
 function error(e){$('error').hidden=false;if(e?.code==='auth/network-request-failed'){$('error').textContent='Firebase 로그인 서버에 연결하지 못했어요. 게임 위치는 초기화되지 않았습니다. 네트워크 연결과 이 사이트의 콘텐츠 차단 설정을 확인한 뒤 같은 자리 링크를 다시 열어주세요. (auth/network-request-failed)';return;}const permissionDenied=/permission.?denied/i.test(`${e?.code||''} ${e?.message||e}`);$('error').textContent=permissionDenied?'Firebase에서 방 저장을 거부했어요. Firebase Console → Realtime Database → 규칙에 프로젝트의 database.rules.json 전체를 붙여넣고 게시한 뒤 새 방을 만들어주세요.':typeof e==='string'?e:`연결을 확인해주세요: ${e.code||e.message}`;}
 function clearError(){$('error').hidden=true;}
+function syncSeatCards(){
+  for(const seat of ['left','right']){
+    const name=room?.initials?.[seat]||(seat==='left'?'왼쪽 플레이어':'오른쪽 플레이어');
+    $(seat+'-name').textContent=name;
+    $(seat+'-current').textContent=side===seat?'· 내 자리':'';
+    $(seat+'-seat').classList.toggle('current-seat',side===seat);
+    const button=$(seat==='left'?'share-left':'share');
+    button.textContent=`${seat==='left'?'L':'R'}: ${name} 링크 복사`;
+    button.setAttribute('aria-label',`${name}님의 ${seat==='left'?'왼쪽':'오른쪽'} 방 링크 복사`);
+  }
+}
 function showGame(){ document.body.classList.add('playing');$('lobby').hidden=true;$('game').hidden=false;resize(); }
 function resize(){const bounds=$('stage').getBoundingClientRect(),w=bounds.width||window.innerWidth,h=bounds.height||window.innerHeight;const dpr=Math.min(devicePixelRatio||1,3);canvas.style.width='100%';canvas.style.height='100%';canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}
 addEventListener('resize',resize);window.visualViewport?.addEventListener('resize',resize);new ResizeObserver(resize).observe($('stage'));$('scale').oninput=resize;
@@ -52,7 +67,7 @@ async function enter(id,create=false,mode='remote',copying=null){
     else{const snapshot=await api.get(roomRef());const r=snapshot.val();if(!r)throw new Error('방이 없어요. 새 방을 만들어주세요.');
       const accessKey=new URL(location.href).searchParams.get('seatKey');
       const action=seatAction(r,uid,selectedSeat,accessKey);seatKeys=r.seatKeys||null;
-      if(action==='invalid')throw new Error('자리 링크가 올바르지 않아요. 상단에서 복사한 전체 링크를 열어주세요.');
+      if(action==='invalid')throw new Error('자리 링크가 올바르지 않아요. 하단에서 복사한 전체 링크를 열어주세요.');
       if(action==='resume'){const resumed=await api.runTransaction(roomRef(selectedSeat),p=>resumeSeat(p,uid,accessKey,r[selectedSeat])??undefined,{applyLocally:false});if(!resumed.committed)throw new Error('자리 연결을 다시 시도해주세요.');side=selectedSeat;}
       if(action==='occupied')throw new Error(`${selectedSeat==='left'?'왼쪽':selectedSeat==='right'?'오른쪽':'선택한'} 자리가 이미 사용 중이에요. 처음 입장했던 브라우저에서 해당 자리 링크를 다시 열어주세요. 다른 브라우저로 바꿨다면 새 방을 만들어주세요.`);
       if(action==='claim'){const claim=await api.runTransaction(roomRef('right'),v=>v?undefined:{uid,...(seatKeys?{accessKey:seatKeys.right}:{}),round:r.round??0,taps:0,lastTap:0},{applyLocally:false});if(!claim.committed)throw new Error('오른쪽 자리에 다른 사람이 먼저 들어왔어요. 새 방을 만들어주세요.');side='right';}else if(action!=='resume')side=action;
@@ -60,7 +75,7 @@ async function enter(id,create=false,mode='remote',copying=null){
     history.replaceState(null,'',selectedSeat?invitationURL(roomId,side):`${location.pathname}${location.search}#${roomId}`);showGame();
     $('share').hidden=false;$('share-left').hidden=false;
     if(create){copiedNotice(copying?await copying:await writeLink(invitationURL()));}
-    if(unsub)unsub();unsub=api.onValue(roomRef(),snapshot=>{room=snapshot.val();if(!room){error('방이 삭제되었어요. 새 게임을 시작해주세요.');return;}const assignedSide=selectedSeat||(room.left.uid===uid?'left':'right');if(assignedSide!==side)cameraReady=false;side=assignedSide;controlsSeat=room[side]?.uid===uid;
+    if(unsub)unsub();unsub=api.onValue(roomRef(),snapshot=>{room=snapshot.val();if(!room){error('방이 삭제되었어요. 새 게임을 시작해주세요.');return;}const assignedSide=selectedSeat||(room.left.uid===uid?'left':'right');if(assignedSide!==side)cameraReady=false;side=assignedSide;controlsSeat=room[side]?.uid===uid;syncSeatCards();
       if(controlsSeat&&room.right&&!room.startAt&&!startBusy){startBusy=true;api.runTransaction(roomRef('startAt'),v=>v??api.serverTimestamp(),{applyLocally:false}).catch(error).finally(()=>startBusy=false);}
     },error);
   }catch(e){error(e);}finally{for(const id of ['create-together','create-remote'])$(id).disabled=false;}

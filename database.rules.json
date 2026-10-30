@@ -70,10 +70,10 @@
         "initials": {
           ".validate": "newData.hasChildren(['left','right']) && (!data.exists() || (newData.child('left').val() == data.child('left').val() && newData.child('right').val() == data.child('right').val()))",
           "left": {
-            ".validate": "newData.isString() && newData.val().length <= 6"
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 12"
           },
           "right": {
-            ".validate": "newData.isString() && newData.val().length <= 6"
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 12"
           },
           "$other": {
             ".validate": false

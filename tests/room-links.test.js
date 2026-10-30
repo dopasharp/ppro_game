@@ -26,6 +26,17 @@ test('same browser seats have distinct stable login sessions',()=>{
  assert.equal(authSession('abc','left'),authSession('abc','left'));
  assert.equal(authSession('abc',null),'[DEFAULT]');
 });
+test('copying either bottom seat card replaces the other seat and its key',()=>{
+ const id='a'.repeat(32),keys={left:'b'.repeat(32),right:'c'.repeat(32)};
+ const base=roomLink('https://example.com/play/',id,'right',keys.right);
+ const left=new URL(roomLink(base,id,'left',keys.left));
+ const right=new URL(roomLink(left.href,id,'right',keys.right));
+ for(const [seat,url] of [['left',left],['right',right]]){
+  assert.equal(url.hash,'#'+id);
+  assert.deepEqual(url.searchParams.getAll('side'),[seat]);
+  assert.deepEqual(url.searchParams.getAll('seatKey'),[keys[seat]]);
+ }
+});
 test('resume starts from the fetched seat when the local transaction cache is empty',()=>{
  const fetched={uid:'old-browser',accessKey:'secret',round:2,taps:9,lastTap:100};
  assert.deepEqual(resumeSeat(null,'new-browser','secret',fetched),{...fetched,uid:'new-browser'});
