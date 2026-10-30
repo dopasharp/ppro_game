@@ -14,12 +14,17 @@ let wallEdge=null,wallUntil=0;
 function notify(message){clearTimeout(noticeTimer);$('notice').textContent=message;$('notice').hidden=false;noticeTimer=setTimeout(()=>$('notice').hidden=true,5000);}
 async function copyInvite(){
   try{await navigator.clipboard.writeText(location.href);notify('링크가 복사되었습니다. 상대에게 공유해주세요!');}
-  catch{$('invite').classList.add('copy-fallback');$('invite').focus();$('invite').select();notify('자동 복사를 할 수 없어요. 아래 선택된 링크를 복사해 상대에게 공유해주세요!');}
+  catch{
+    const field=document.createElement('textarea');field.value=location.href;field.readOnly=true;
+    field.style.cssText='position:fixed;left:-9999px;top:0;opacity:0';document.body.append(field);
+    let copied=false;try{field.select();copied=document.execCommand('copy');}catch{}finally{field.remove();}
+    notify(copied?'링크가 복사되었습니다. 상대에게 공유해주세요!':'복사하지 못했어요. 상단 링크 다시 복사 버튼을 눌러주세요.');
+  }
 }
 const now=()=>Date.now()+offset;
 function error(e){$('error').hidden=false;const permissionDenied=/permission.?denied/i.test(`${e?.code||''} ${e?.message||e}`);$('error').textContent=permissionDenied?'Firebase에서 방 저장을 거부했어요. Firebase Console → Realtime Database → 규칙에 프로젝트의 database.rules.json 전체를 붙여넣고 게시한 뒤 새 방을 만들어주세요.':typeof e==='string'?e:`연결을 확인해주세요: ${e.code||e.message}`;}
 function clearError(){$('error').hidden=true;}
-function showGame(){ document.body.classList.add('playing');$('lobby').hidden=true;$('game').hidden=false;$('invite').value=location.href;resize(); }
+function showGame(){ document.body.classList.add('playing');$('lobby').hidden=true;$('game').hidden=false;resize(); }
 function resize(){const bounds=$('stage').getBoundingClientRect(),w=bounds.width||window.innerWidth,h=bounds.height||window.innerHeight;const dpr=Math.min(devicePixelRatio||1,3);canvas.style.width='100%';canvas.style.height='100%';canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}
 addEventListener('resize',resize);window.visualViewport?.addEventListener('resize',resize);new ResizeObserver(resize).observe($('stage'));$('scale').oninput=resize;
 async function firebase(){
@@ -59,7 +64,7 @@ $('new').onclick=async()=>{
   try{await api.runTransaction(roomRef(),r=>{const current=r??beforeReset;return (current.round??0)===expectedRound?resetRound(current,api.serverTimestamp())??undefined:undefined;},{applyLocally:false});}catch(e){error(e);}finally{resetBusy=false;$('new').disabled=false;}
 };
 $('share').onclick=copyInvite;
-$('demo').onclick=()=>{clearError();demo=true;demoStarted=false;cameraReady=false;finishAt=0;connected=true;roomId=null;room={mode:'remote',initials:initials(),meetingMessage:$('meeting-message').value.trim().slice(0,40),round:0,left:{round:0,taps:0},right:{round:0,taps:0},startAt:now()};side='left';$('connection').textContent='테스트';$('share').hidden=true;showGame();$('invite').hidden=true;};
+$('demo').onclick=()=>{clearError();demo=true;demoStarted=false;cameraReady=false;finishAt=0;connected=true;roomId=null;room={mode:'remote',initials:initials(),meetingMessage:$('meeting-message').value.trim().slice(0,40),round:0,left:{round:0,taps:0},right:{round:0,taps:0},startAt:now()};side='left';$('connection').textContent='테스트';$('share').hidden=true;showGame();};
 setInterval(()=>{if(demo&&demoStarted&&canTap({...room,startAt:room.startAt+3000},now())){const position=state(room.left.taps,room.right.taps);if(!position.done||position.meeting>MIN_MEETING)room.right.taps++;}},280);
 async function tap(){
   if(!room||!connected||busy||now()-lastInput<65||!canTap({...room,startAt:room.startAt?room.startAt+3000:null},now()))return;
