@@ -51,3 +51,12 @@ test('wide together screens center starting bears while preserving contact spaci
   }
  }
 });
+
+test('wall contact places the outer bear edge at the heart marker on all widths',()=>{
+ for(const width of [390,633,1125,1500])for(const mode of ['remote','together']){
+  const left=roadLayout(state(0,1000),width,mode);
+  const right=roadLayout(state(1000,0),width,mode);
+  assert.ok(Math.abs(left.leftX-48-left.leftMarker)<1e-8);
+  assert.ok(Math.abs(right.rightX+48-right.rightMarker)<1e-8);
+ }
+});

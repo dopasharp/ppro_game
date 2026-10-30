@@ -5,8 +5,8 @@ export function viewportLayout(width,height,side,mode,cameraX,scene=null){
   const sceneWidth=width/scale;
   const offsetY=(height-HEIGHT*scale)/2;
   const stretch=roadStretch(sceneWidth);
-  const center=scene?.done?scene.meeting:cameraX+WIDTH/2;
-  const view=mode==='together'?(side==='left'?WIDTH-sceneWidth:WIDTH):WIDTH+(center-WIDTH)*stretch-sceneWidth/2;
+  const cameraCenter=scene?.done?roadLayout(scene,sceneWidth,mode).meeting:WIDTH+(cameraX+WIDTH/2-WIDTH)*stretch;
+  const view=mode==='together'?(side==='left'?WIDTH-sceneWidth:WIDTH):cameraCenter-sceneWidth/2;
   return {sceneWidth,view,scale,offsetY};
 }
 // Each bite opens and closes the mouth twice, then returns to rest.
@@ -15,16 +15,23 @@ export function bitePose(elapsed){
   return {frame:chewing?Math.floor(elapsed/120)%4:0,row:chewing&&Math.floor(elapsed/120)%2===0?1:0};
 }
 export const LEFT_START=104, RIGHT_START=676, KISS_GAP=96;
-export const MIN_MEETING=LEFT_START+KISS_GAP/2, MAX_MEETING=RIGHT_START-KISS_GAP/2;
+export const MIN_MEETING=100, MAX_MEETING=680;
 export const STEP=(RIGHT_START-LEFT_START-KISS_GAP)/TOTAL;
 function roadStretch(width){return Math.max(1,(width/2-KISS_GAP/2)/(WIDTH-LEFT_START-KISS_GAP/2));}
 // Extend walking distances on wide screens without widening sprites.
 export function roadLayout(scene,width,mode){
   const stretch=roadStretch(width);
-  const center=x=>WIDTH+(x-WIDTH)*stretch;
-  const left=x=>center(x)+(stretch-1)*KISS_GAP/2;
-  const right=x=>center(x)-(stretch-1)*KISS_GAP/2;
-  return {...scene,leftX:left(scene.leftX),rightX:right(scene.rightX),meeting:center(scene.meeting),roadWidth:width,leftMarker:WIDTH-width+35,rightMarker:WIDTH+width-35};
+  const leftMarker=WIDTH-width+35,rightMarker=WIDTH+width-35;
+  const initialMin=LEFT_START+KISS_GAP/2,initialMax=RIGHT_START-KISS_GAP/2;
+  const center=x=>{
+    if(x<initialMin){const atStart=WIDTH+(initialMin-WIDTH)*stretch;return atStart+(leftMarker+KISS_GAP-atStart)*(initialMin-x)/(initialMin-MIN_MEETING);}
+    if(x>initialMax){const atStart=WIDTH+(initialMax-WIDTH)*stretch;return atStart+(rightMarker-KISS_GAP-atStart)*(x-initialMax)/(MAX_MEETING-initialMax);}
+    return WIDTH+(x-WIDTH)*stretch;
+  };
+  const left=x=>WIDTH+(x-WIDTH)*stretch+(stretch-1)*KISS_GAP/2;
+  const right=x=>WIDTH+(x-WIDTH)*stretch-(stretch-1)*KISS_GAP/2;
+  const meeting=center(scene.meeting);
+  return {...scene,leftX:scene.done?meeting-KISS_GAP/2:left(scene.leftX),rightX:scene.done?meeting+KISS_GAP/2:right(scene.rightX),meeting,roadWidth:width,leftMarker,rightMarker};
 }
 export function state(left=0,right=0){
   const done=left+right>=TOTAL;

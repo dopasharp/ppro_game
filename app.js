@@ -1,6 +1,6 @@
 import {writeLink} from './clipboard.js?v=23';
 import {firebaseConfig,emulatorPorts} from './firebase-config.js';
-import {WIDTH,HEIGHT,TOTAL,state,canTap,advanceCamera,resetRound,bitePose,MIN_MEETING,MAX_MEETING,viewportLayout,roadLayout} from './game.js?v=25';
+import {WIDTH,HEIGHT,TOTAL,state,canTap,advanceCamera,resetRound,bitePose,MIN_MEETING,MAX_MEETING,viewportLayout,roadLayout} from './game.js?v=28';
 const $=id=>document.getElementById(id), canvas=$('canvas'),ctx=canvas.getContext('2d'),overview=$('overview').getContext('2d');
 let demoStarted=false,cameraX=0,cameraReady=false,lastFrame=0,finishAt=0,observedRound=null,resetBusy=false;
 let room=null,side='left',uid,db,api,connected=false,offset=0,busy=false,unsub=null,roomId=null,demo=false,lastInput=0,startBusy=false;
@@ -91,11 +91,14 @@ function pepero(c,s,left,right){
   const gap=s.rightX-s.leftX-96;
   if(gap<=.01)return;
   // Tile at one uniform scale; longer tablet roads add length, never distortion.
-  const height=18,tileWidth=chocolateWidth/sh*height;
+  const height=18,tileWidth=chocolateWidth/sh*height,cookieWidth=(chocolateX-sx)/sh*height;
   const origin=roadLayout(state(),s.roadWidth,room?.mode).leftX+48;
   const start=s.leftX+48,end=start+gap;
   c.save();c.beginPath();c.rect(start,477-height/2,gap,height);c.clip();
-  for(let x=origin+Math.floor((start-origin)/tileWidth)*tileWidth;x<end;x+=tileWidth){
+  // Keep one biscuit handle at the host's end; only chocolate repeats beyond it.
+  c.drawImage(img,sx,sy,chocolateX-sx,sh,origin,477-height/2,cookieWidth,height);
+  const chocolateOrigin=origin+cookieWidth;
+  for(let x=chocolateOrigin+Math.max(0,Math.floor((start-chocolateOrigin)/tileWidth))*tileWidth;x<end;x+=tileWidth){
     c.drawImage(img,chocolateX,sy,chocolateWidth,sh,x,477-height/2,tileWidth,height);
   }
   c.restore();

@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {state,canTap,TOTAL,STEP,LEFT_START,RIGHT_START} from '../game.js';
+import test from 'node:test';import assert from 'node:assert/strict';import {state,canTap,TOTAL,STEP,LEFT_START,RIGHT_START,MIN_MEETING,MAX_MEETING} from '../game.js';
 test('each tap moves only that player by a large fixed step',()=>{for(let l=0;l<12;l++)for(let r=0;r<12;r++){const a=state(l,r),b=state(l+1,r),c=state(l,r+1);assert.ok(Math.abs(b.leftX-a.leftX-STEP)<1e-9);assert.equal(b.rightX,a.rightX);assert.equal(c.leftX,a.leftX);assert.ok(Math.abs(a.rightX-c.rightX-STEP)<1e-9);}assert.ok(STEP>15);});
 test('start at outer screen edges',()=>{assert.equal(state().leftX,LEFT_START);assert.equal(state().rightX,RIGHT_START);assert.equal(state().progress,0);});
 test('faster left bear crosses to right phone; faster right crosses left',()=>{assert.equal(state(18,6).meetingSide,'right');assert.equal(state(6,18).meetingSide,'left');assert.equal(state(12,12).meetingSide,'tie');});
@@ -17,10 +17,10 @@ test('joined bears stay together through continued and opposing taps',()=>{
 });
 
 test('joined bears stop within both lamps and can move back immediately',()=>{
- const right=state(24,0),left=state(0,24);
- assert.equal(right.rightX,RIGHT_START);assert.equal(left.leftX,LEFT_START);
- assert.equal(state(10000,0).rightX,RIGHT_START);
- assert.equal(state(0,10000).leftX,LEFT_START);
- assert.ok(state(24,1).meeting<right.meeting);
- assert.ok(state(1,24).meeting>left.meeting);
+ const right=state(30,0),left=state(0,30);
+ assert.equal(right.meeting,MAX_MEETING);assert.equal(left.meeting,MIN_MEETING);
+ assert.equal(state(10000,0).meeting,MAX_MEETING);
+ assert.equal(state(0,10000).meeting,MIN_MEETING);
+ assert.ok(state(30,1).meeting<right.meeting);
+ assert.ok(state(1,30).meeting>left.meeting);
 });
