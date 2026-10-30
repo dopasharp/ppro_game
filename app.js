@@ -1,3 +1,4 @@
+import {roomStatus} from './room-status.js?v=43';
 import {signInWithRetry} from './firebase-session.js?v=35';
 import {roomLink,requestedSeat,authSession,seatAction,resumeSeat} from './room-links.js?v=37';
 import {writeLink} from './clipboard.js?v=23';
@@ -13,7 +14,8 @@ const animation={left:{taps:0,at:-Infinity},right:{taps:0,at:-Infinity}};
 function pose(player,taps,time){const a=animation[player];if(a.taps!==taps){a.taps=taps;a.at=time;}return bitePose(time-a.at);}
 const initials=()=>({left:$('my-initial').value.trim().slice(0,12),right:$('partner-initial').value.trim().slice(0,12)});
 let noticeTimer;
-let seatKeys=null,controlsSeat=true;
+let seatKeys=null,controlsSeat=true,roomLoaded=false,seenOpponent=false,enterGeneration=0;
+function currentStatus(){return roomStatus({room,side,loaded:roomLoaded,connected,controlsSeat,seenOpponent,now:now()});}
 let wallEdge=null,wallUntil=0;
 function notify(message){clearTimeout(noticeTimer);$('notice').textContent=message;$('notice').hidden=false;noticeTimer=setTimeout(()=>$('notice').hidden=true,5000);}
 function copiedNotice(copied){notify(copied?'링크가 복사되었습니다. 상대에게 공유해주세요!':'브라우저에서 복사를 허용하지 않았어요. 하단의 해당 자리 링크 복사 버튼을 눌러주세요.');}
@@ -61,6 +63,7 @@ async function firebase(session='[DEFAULT]'){
 function roomRef(path=''){return api.ref(db,`rooms/${roomId}${path?'/'+path:''}`);}
 async function enter(id,create=false,mode='remote',copying=null){
   clearError();for(const id of ['create-together','create-remote'])$(id).disabled=true;
+  const generation=++enterGeneration;roomLoaded=false;seenOpponent=false;room=null;controlsSeat=false;
   const selectedSeat=create?'left':requestedSeat(location.href);
   try{roomId=id;side=selectedSeat||'right';await firebase(authSession(id,selectedSeat));demo=false;cameraReady=false;finishAt=0;
     if(create){await api.set(roomRef(),{mode,seatKeys,initials:initials(),meetingMessage:$('meeting-message').value.trim().slice(0,40),round:0,createdAt:api.serverTimestamp(),left:{uid,accessKey:seatKeys.left,round:0,taps:0,lastTap:0}});}
@@ -72,10 +75,15 @@ async function enter(id,create=false,mode='remote',copying=null){
       if(action==='occupied')throw new Error(`${selectedSeat==='left'?'왼쪽':selectedSeat==='right'?'오른쪽':'선택한'} 자리가 이미 사용 중이에요. 처음 입장했던 브라우저에서 해당 자리 링크를 다시 열어주세요. 다른 브라우저로 바꿨다면 새 방을 만들어주세요.`);
       if(action==='claim'){const claim=await api.runTransaction(roomRef('right'),v=>v?undefined:{uid,...(seatKeys?{accessKey:seatKeys.right}:{}),round:r.round??0,taps:0,lastTap:0},{applyLocally:false});if(!claim.committed)throw new Error('오른쪽 자리에 다른 사람이 먼저 들어왔어요. 새 방을 만들어주세요.');side='right';}else if(action!=='resume')side=action;
     }
+    const confirmed=(await api.get(roomRef())).val();
+    if(generation!==enterGeneration)return;
+    if(!confirmed)throw new Error('방 정보를 불러오지 못했어요. 같은 링크를 다시 열어주세요.');
+    room=confirmed;roomLoaded=true;controlsSeat=room[side]?.uid===uid;
+    seenOpponent=!!room[side==='left'?'right':'left'];syncSeatCards();
     history.replaceState(null,'',selectedSeat?invitationURL(roomId,side):`${location.pathname}${location.search}#${roomId}`);showGame();
     $('share').hidden=false;$('share-left').hidden=false;
     if(create){copiedNotice(copying?await copying:await writeLink(invitationURL()));}
-    if(unsub)unsub();unsub=api.onValue(roomRef(),snapshot=>{room=snapshot.val();if(!room){error('방이 삭제되었어요. 새 게임을 시작해주세요.');return;}const assignedSide=selectedSeat||(room.left.uid===uid?'left':'right');if(assignedSide!==side)cameraReady=false;side=assignedSide;controlsSeat=room[side]?.uid===uid;syncSeatCards();
+    if(unsub)unsub();unsub=api.onValue(roomRef(),snapshot=>{if(generation!==enterGeneration)return;room=snapshot.val();if(!room){error('방이 삭제되었어요. 새 게임을 시작해주세요.');return;}const assignedSide=selectedSeat||(room.left.uid===uid?'left':'right');if(assignedSide!==side)cameraReady=false;side=assignedSide;controlsSeat=room[side]?.uid===uid;roomLoaded=true;seenOpponent=seenOpponent||!!room[side==='left'?'right':'left'];syncSeatCards();
       if(controlsSeat&&room.right&&!room.startAt&&!startBusy){startBusy=true;api.runTransaction(roomRef('startAt'),v=>v??api.serverTimestamp(),{applyLocally:false}).catch(error).finally(()=>startBusy=false);}
     },error);
   }catch(e){error(e);}finally{for(const id of ['create-together','create-remote'])$(id).disabled=false;}
@@ -97,14 +105,33 @@ $('share-left').onclick=()=>copyInvite('left');
 
 setInterval(()=>{if(demo&&demoStarted&&canTap({...room,startAt:room.startAt+3000},now())){const position=state(room.left.taps,room.right.taps);if(!position.done||position.meeting>MIN_MEETING)room.right.taps++;}},280);
 async function tap(){
-  if(!room||!connected||(!demo&&!controlsSeat)||busy||now()-lastInput<65||!canTap({...room,startAt:room.startAt?room.startAt+3000:null},now()))return;
-  const position=state(room.left?.taps,room.right?.taps);
-  if(position.done&&((side==='left'&&position.meeting>=MAX_MEETING)||(side==='right'&&position.meeting<=MIN_MEETING))){wallUntil=now()+1500;return;}
+  if(!room||!connected||busy||now()-lastInput<65)return;
   lastInput=now();
-  if(demo){demoStarted=true;room.left.taps++;return;}
-  const expectedRound=room.round??0,seat=side,fallback=room[side];
-  busy=true;try{await api.runTransaction(roomRef(seat),p=>{const current=p??fallback;return current?.uid===uid&&(current.round??0)===expectedRound?{...current,taps:current.taps+1,lastTap:api.serverTimestamp()}:undefined;},{applyLocally:false});}catch(e){if((room?.round??0)===expectedRound)error(e);}finally{busy=false;}
+  if(demo){if(canTap({...room,startAt:room.startAt?room.startAt+3000:null},now())){demoStarted=true;room.left.taps++;}return;}
+  const seat=side,activeRoom=roomId,generation=enterGeneration;
+  busy=true;
+  try{
+    // Ownership changes only on a deliberate touch, never on a room update.
+    if(!controlsSeat||room[seat]?.uid!==uid){
+      const key=seatKeys?.[seat],fallback=room[seat];
+      if(!key){error('이 자리의 전체 링크를 다시 열어주세요.');return;}
+      const result=await api.runTransaction(roomRef(seat),p=>resumeSeat(p,uid,key,fallback)??undefined,{applyLocally:false});
+      if(generation!==enterGeneration||activeRoom!==roomId)return;
+      if(!result.committed){error('제어권을 가져오지 못했어요. 화면을 다시 터치해주세요.');return;}
+      const player=result.snapshot.val();room={...room,[seat]:player};controlsSeat=player.uid===uid;
+      clearError();syncSeatCards();
+      const waitForTap=Math.max(0,65-(now()-(player.lastTap||0)));
+      if(waitForTap)await new Promise(resolve=>setTimeout(resolve,waitForTap));
+      if(generation!==enterGeneration||activeRoom!==roomId)return;
+    }
+    if(!canTap({...room,startAt:room.startAt?room.startAt+3000:null},now()))return;
+    const position=state(room.left?.taps,room.right?.taps);
+    if(position.done&&((seat==='left'&&position.meeting>=MAX_MEETING)||(seat==='right'&&position.meeting<=MIN_MEETING))){wallUntil=now()+1500;return;}
+    const expectedRound=room.round??0,fallback=room[seat];
+    await api.runTransaction(roomRef(seat),p=>{const current=p??fallback;return current?.uid===uid&&(current.round??0)===expectedRound?{...current,taps:current.taps+1,lastTap:api.serverTimestamp()}:undefined;},{applyLocally:false});
+  }catch(e){if(generation===enterGeneration)error(e);}finally{busy=false;}
 }
+
 canvas.addEventListener('pointerdown',e=>{e.preventDefault();canvas.focus();tap();});canvas.addEventListener('keydown',e=>{if((e.key===' '||e.key==='Enter')&&!e.repeat){e.preventDefault();tap();}});
 function circle(c,x,y,r,fill){c.fillStyle=fill;c.beginPath();c.arc(x,y,r,0,Math.PI*2);c.fill();}
 function bear(c,name,x,flip,frame,row){
@@ -173,7 +200,7 @@ function scenery(c,view,width,t){
   c.restore();
 }
 function world(c,view,width,t){
-  const l=room?.left?.taps||0,r=room?.right?.taps||0,s=roadLayout(state(l,r),width,room?.mode),waiting=!room?.right;
+  const l=room?.left?.taps||0,r=room?.right?.taps||0,s=roadLayout(state(l,r),width,room?.mode);
   c.save();c.beginPath();c.rect(0,0,width,HEIGHT);c.clip();c.translate(-view,0);
   scenery(c,view,width,t);
   if(room?.mode!=='remote'){c.strokeStyle='#c0a98a';c.lineWidth=1;c.setLineDash([3,8]);c.beginPath();c.moveTo(390,140);c.lineTo(390,710);c.stroke();c.setLineDash([]);}
@@ -258,7 +285,7 @@ function world(c,view,width,t){
     c.restore();
   }
 
-  c.fillStyle='#b28f79';c.font='12px sans-serif';c.fillText(waiting?'상대 대기 중':s.done?'':'탭하여 이동',view+width/2,650);
+  c.fillStyle='#b28f79';c.font='12px sans-serif';c.fillText(currentStatus(),view+width/2,650);
   c.fillStyle='#e1d0bb';c.fillRect(view+50,690,width-100,3);c.fillStyle='#c68585';c.fillRect(view+50,690,(width-100)*s.progress,3);
   c.restore();
 }
@@ -278,14 +305,14 @@ let lastStatus='';function frame(t){
   if(room){const s=state(room.left?.taps,room.right?.taps);$('score').textContent=`${room.left?.taps||0} : ${room.right?.taps||0}`;
     const seconds=room.startAt?Math.ceil((room.startAt+3000-now())/1000):0;
     const countText=room.startAt?countdownText(now()-room.startAt):'';
-    const counting=connected&&!!room.right&&!!countText;
+    const counting=roomLoaded&&connected&&!!room.left&&!!room.right&&!!countText;
     $('countdown').hidden=!counting;
     if(counting&&countText!==lastCountdown){
       $('countdown-number').textContent=countText;
       $('countdown-number').animate([{transform:'scale(.65)',opacity:.3},{transform:'scale(1.12)',opacity:1,offset:.65},{transform:'scale(1)',opacity:1}],{duration:420,easing:'ease-out'});
     }
     lastCountdown=counting?countText:'';
-    const text=!demo&&!controlsSeat?'다른 브라우저에서 이어 하는 중':!connected?'재연결 중':!room.right?'상대 대기 중':seconds>0?'':s.done?'':'탭하여 이동';if(text!==lastStatus){$('status').textContent=text;lastStatus=text;}}
+    const text=currentStatus();if(text!==lastStatus){$('status').textContent=text;lastStatus=text;}}else if(!roomLoaded){const text=currentStatus();if(text!==lastStatus){$('status').textContent=text;lastStatus=text;}}
   requestAnimationFrame(frame);
 }requestAnimationFrame(frame);
 const id=location.hash.slice(1);if(id){if(/^[a-f0-9]{32}$/.test(id))enter(id);else error('올바른 초대 링크가 아니에요. 새 방을 만들어주세요.');}
@@ -294,3 +321,6 @@ const id=location.hash.slice(1);if(id){if(/^[a-f0-9]{32}$/.test(id))enter(id);el
 
 
 
+
+// A hash-only navigation can switch rooms without reloading the page.
+addEventListener('hashchange',()=>{if(location.hash.slice(1)!==roomId)location.reload();});
