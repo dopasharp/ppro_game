@@ -1,6 +1,6 @@
-import {roomStatus} from './room-status.js?v=43';
+import {roomStatus} from './room-status.js?v=46';
 import {signInWithRetry} from './firebase-session.js?v=35';
-import {roomLink,requestedSeat,authSession,seatAction,resumeSeat} from './room-links.js?v=37';
+import {roomLink,requestedSeat,authSession,seatAction,resumeSeat,lobbyLink} from './room-links.js?v=45';
 import {writeLink} from './clipboard.js?v=23';
 import {firebaseConfig,emulatorPorts} from './firebase-config.js';
 import {WIDTH,HEIGHT,TOTAL,state,canTap,advanceCamera,resetRound,bitePose,MIN_MEETING,MAX_MEETING,viewportLayout,roadLayout,countdownText} from './game.js?v=39';
@@ -9,7 +9,6 @@ let demoStarted=false,cameraX=0,cameraReady=false,lastFrame=0,finishAt=0,observe
 let room=null,side='left',uid,db,api,connected=false,offset=0,busy=false,unsub=null,roomId=null,demo=false,lastInput=0,startBusy=false;
 const spriteMeta=await fetch(new URL('./assets/sprites.json',import.meta.url)).then(r=>{if(!r.ok)throw new Error('스프라이트 정보를 불러올 수 없습니다.');return r.json();});
 const images={};for(const name of ['cream','pink','pepero']){const i=new Image();i.src=`./assets/${name}.png`;i.onerror=()=>error(`이미지 로딩 실패: ${name}`);images[name]=i;}
-const garland=new Image();garland.src='./assets/ribbon-garland.png';
 const animation={left:{taps:0,at:-Infinity},right:{taps:0,at:-Infinity}};
 function pose(player,taps,time){const a=animation[player];if(a.taps!==taps){a.taps=taps;a.at=time;}return bitePose(time-a.at);}
 const initials=()=>({left:$('my-initial').value.trim().slice(0,12),right:$('partner-initial').value.trim().slice(0,12)});
@@ -20,7 +19,8 @@ let wallEdge=null,wallUntil=0;
 function notify(message){clearTimeout(noticeTimer);$('notice').textContent=message;$('notice').hidden=false;noticeTimer=setTimeout(()=>$('notice').hidden=true,5000);}
 function copiedNotice(copied){notify(copied?'링크가 복사되었습니다. 상대에게 공유해주세요!':'브라우저에서 복사를 허용하지 않았어요. 하단의 해당 자리 링크 복사 버튼을 눌러주세요.');}
 function invitationURL(id=roomId,seat='right'){return roomLink(location.href,id,seat,seatKeys?.[seat]);}
-async function copyInvite(seat='right'){const copied=await writeLink(invitationURL(roomId,seat));if(copied)notify(`${seat==='left'?'왼쪽':'오른쪽'} 링크가 복사되었습니다.${seat==='right'?' 상대에게 공유해주세요!':' 내 자리로 돌아올 때 사용해주세요.'}`);else copiedNotice(false);}
+function closeShareMenu(){ $('seat-links').hidden=true;$('share-menu').setAttribute('aria-expanded','false'); }
+async function copyInvite(seat='right'){const copied=await writeLink(invitationURL(roomId,seat));if(copied)closeShareMenu();if(copied)notify(`${seat==='left'?'왼쪽':'오른쪽'} 링크가 복사되었습니다.${seat==='right'?' 상대에게 공유해주세요!':' 내 자리로 돌아올 때 사용해주세요.'}`);else copiedNotice(false);}
 function createRoom(mode){
   for(const id of ['my-initial','partner-initial']){
     const input=$(id);input.value=input.value.trim();
@@ -45,7 +45,7 @@ function syncSeatCards(){
     button.setAttribute('aria-label',`${name}님의 ${seat==='left'?'왼쪽':'오른쪽'} 방 링크 복사`);
   }
 }
-function showGame(){ document.body.classList.add('playing');$('lobby').hidden=true;$('game').hidden=false;resize(); }
+function showGame(){closeShareMenu(); document.body.classList.add('playing');$('lobby').hidden=true;$('game').hidden=false;resize(); }
 function resize(){const bounds=$('stage').getBoundingClientRect(),w=bounds.width||window.innerWidth,h=bounds.height||window.innerHeight;const dpr=Math.min(devicePixelRatio||1,3);canvas.style.width='100%';canvas.style.height='100%';canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}
 addEventListener('resize',resize);window.visualViewport?.addEventListener('resize',resize);new ResizeObserver(resize).observe($('stage'));$('scale').oninput=resize;
 let activeAuthSession=null,infoStops=[];
@@ -100,6 +100,30 @@ $('new').onclick=async()=>{
   const expectedRound=room.round??0,beforeReset=room;resetBusy=true;$('new').disabled=true;
   try{await api.runTransaction(roomRef(),r=>{const current=r??beforeReset;return (current.round??0)===expectedRound?resetRound(current,api.serverTimestamp())??undefined:undefined;},{applyLocally:false});}catch(e){error(e);}finally{resetBusy=false;$('new').disabled=false;}
 };
+$('create-new').onclick=()=>{
+  if(room){
+    $('my-initial').value=room.initials?.left??$('my-initial').value;
+    $('partner-initial').value=room.initials?.right??$('partner-initial').value;
+    $('meeting-message').value=room.meetingMessage??$('meeting-message').value;
+  }
+  ++enterGeneration;
+  if(unsub){unsub();unsub=null;}
+  for(const stop of infoStops)stop();infoStops=[];activeAuthSession=null;api=null;db=null;
+  room=null;roomId=null;seatKeys=null;roomLoaded=false;seenOpponent=false;controlsSeat=false;connected=false;
+  busy=false;resetBusy=false;startBusy=false;observedRound=null;side='left';demo=false;
+  resetPresentation();lastStatus='';lastCountdown='';
+  clearError();clearTimeout(noticeTimer);$('notice').hidden=true;$('countdown').hidden=true;
+  $('game').hidden=true;$('lobby').hidden=false;document.body.classList.remove('playing');
+  $('connection').textContent='대기';$('new').disabled=false;
+  history.replaceState(null,'',lobbyLink(location.href));
+  $('my-initial').focus();
+};
+$('share-menu').onclick=()=>{
+  const opening=$('seat-links').hidden;$('seat-links').hidden=!opening;
+  $('share-menu').setAttribute('aria-expanded',String(opening));
+};
+document.addEventListener('pointerdown',event=>{if(!$('seat-links').contains(event.target)&&!$('share-menu').contains(event.target))closeShareMenu();});
+document.addEventListener('keydown',event=>{if(event.key==='Escape')closeShareMenu();});
 $('share').onclick=()=>copyInvite('right');
 $('share-left').onclick=()=>copyInvite('left');
 
@@ -129,7 +153,7 @@ async function tap(){
     if(position.done&&((seat==='left'&&position.meeting>=MAX_MEETING)||(seat==='right'&&position.meeting<=MIN_MEETING))){wallUntil=now()+1500;return;}
     const expectedRound=room.round??0,fallback=room[seat];
     await api.runTransaction(roomRef(seat),p=>{const current=p??fallback;return current?.uid===uid&&(current.round??0)===expectedRound?{...current,taps:current.taps+1,lastTap:api.serverTimestamp()}:undefined;},{applyLocally:false});
-  }catch(e){if(generation===enterGeneration)error(e);}finally{busy=false;}
+  }catch(e){if(generation===enterGeneration)error(e);}finally{if(generation===enterGeneration)busy=false;}
 }
 
 canvas.addEventListener('pointerdown',e=>{e.preventDefault();canvas.focus();tap();});canvas.addEventListener('keydown',e=>{if((e.key===' '||e.key==='Enter')&&!e.repeat){e.preventDefault();tap();}});
@@ -170,31 +194,37 @@ function pepero(c,s,left,right){
 function scenery(c,view,width,t){
   c.save();c.translate(view,0);
   const sky=c.createLinearGradient(0,0,0,HEIGHT);
-  sky.addColorStop(0,'#fff6f2');sky.addColorStop(.64,'#fffaf6');sky.addColorStop(1,'#f3e9e3');
+  sky.addColorStop(0,'#cfe9f7');sky.addColorStop(.55,'#edf7fa');sky.addColorStop(.65,'#f7f5e9');sky.addColorStop(1,'#f6f0df');
   c.fillStyle=sky;c.fillRect(0,0,width,HEIGHT);
   // The distant decorations scroll slowly; the path stays anchored to the bears.
   for(let n=Math.floor(view*.22/640)-1;n<=Math.ceil((view*.22+width)/640);n++){
     const x=n*640-view*.22;
-    if(garland.complete&&garland.naturalWidth){
-      c.globalAlpha=.38;c.drawImage(garland,x,80,640,640*garland.naturalHeight/garland.naturalWidth);c.globalAlpha=1;
+    // Soft clouds stay above the action, with a slower parallax than the path.
+    c.fillStyle='#ffffffc9';
+    for(const [cx,cy,size] of [[x+145,154,1],[x+480,248,.7]]){
+      c.beginPath();c.ellipse(cx,cy,62*size,17*size,0,0,Math.PI*2);c.fill();
+      circle(c,cx-20*size,cy-12*size,22*size,'#ffffffc9');
+      circle(c,cx+10*size,cy-19*size,28*size,'#ffffffc9');
+      circle(c,cx+38*size,cy-8*size,18*size,'#ffffffc9');
     }
-    c.fillStyle='#f3ddd780';c.beginPath();c.ellipse(x+180,543,230,74,0,Math.PI,0);c.fill();
-    c.fillStyle='#eadfdf60';c.beginPath();c.ellipse(x+470,543,210,53,0,Math.PI,0);c.fill();
+    c.fillStyle='#cee0c8';c.beginPath();c.ellipse(x+180,543,230,74,0,Math.PI,0);c.fill();
+    c.fillStyle='#e0eaca';c.beginPath();c.ellipse(x+470,543,210,53,0,Math.PI,0);c.fill();
   }
-  c.fillStyle='#f5e6dc';c.fillRect(0,546,width,65);
-  c.strokeStyle='#e7cdc1';c.lineWidth=1;c.beginPath();c.moveTo(0,546);c.lineTo(width,546);c.stroke();
-  c.strokeStyle='#fff8f0';c.lineWidth=2;c.setLineDash([5,15]);c.lineDashOffset=view%20;c.beginPath();c.moveTo(0,602);c.lineTo(width,602);c.stroke();c.setLineDash([]);c.lineDashOffset=0;
+  c.fillStyle='#e5edcc';c.fillRect(0,537,width,9);
+  c.fillStyle='#f2e5cb';c.fillRect(0,546,width,65);
+  c.strokeStyle='#d6d9b7';c.lineWidth=1;c.beginPath();c.moveTo(0,546);c.lineTo(width,546);c.stroke();
+  c.strokeStyle='#fffdf4';c.lineWidth=2;c.setLineDash([5,15]);c.lineDashOffset=view%20;c.beginPath();c.moveTo(0,602);c.lineTo(width,602);c.stroke();c.setLineDash([]);c.lineDashOffset=0;
   for(let n=Math.floor(view/120)-1;n<=Math.ceil((view+width)/120);n++){
     const x=n*120-view;
-    circle(c,x+16,574,2,'#dcbcae70');circle(c,x+67,586,1.5,'#dcbcae60');
-    c.save();c.translate(x+30,542);c.strokeStyle='#b8bda0';c.lineWidth=1.5;
+    circle(c,x+16,574,2,'#c6b28d70');circle(c,x+67,586,1.5,'#c6b28d60');
+    c.save();c.translate(x+30,542);c.strokeStyle='#a1b58c';c.lineWidth=1.5;
     c.beginPath();c.moveTo(0,0);c.quadraticCurveTo(4,-10,1,-18);c.stroke();
-    for(let petal=0;petal<5;petal++){const a=petal*Math.PI*2/5;circle(c,1+Math.cos(a)*4,-20+Math.sin(a)*4,3,'#eab9be');}
+    for(let petal=0;petal<5;petal++){const a=petal*Math.PI*2/5;circle(c,1+Math.cos(a)*4,-20+Math.sin(a)*4,3,n%3===0?'#e9bcc4':'#fffdf2');}
     circle(c,1,-20,2,'#f8e7ba');c.restore();
   }
   for(let n=Math.floor(view*.4/180)-1;n<=Math.ceil((view*.4+width)/180);n++){
     const x=n*180-view*.4;
-    c.globalAlpha=.25;c.fillStyle='#dba5ae';c.font='12px serif';c.textAlign='center';
+    c.globalAlpha=.15;c.fillStyle='#88adbd';c.font='12px serif';c.textAlign='center';
     c.fillText('♡',x+55,300+Math.sin(n*2+t/2600)*7);c.globalAlpha=1;
   }
   c.restore();
@@ -206,7 +236,7 @@ function world(c,view,width,t){
   if(room?.mode!=='remote'){c.strokeStyle='#c0a98a';c.lineWidth=1;c.setLineDash([3,8]);c.beginPath();c.moveTo(390,140);c.lineTo(390,710);c.stroke();c.setLineDash([]);}
   c.textAlign='center';
   
-  c.fillStyle='#e3d5bd';c.beginPath();c.ellipse(s.leftX,548,49,10,0,0,Math.PI*2);c.ellipse(s.rightX,548,49,10,0,0,Math.PI*2);c.fill();
+  c.fillStyle='#c7bba077';c.beginPath();c.ellipse(s.leftX,548,49,10,0,0,Math.PI*2);c.ellipse(s.rightX,548,49,10,0,0,Math.PI*2);c.fill();
   // Matching chocolate-heart markers frame the little candy path.
   for(const [x,direction] of [[s.leftMarker,1],[s.rightMarker,-1]]){
     c.save();c.translate(x,0);
@@ -285,8 +315,8 @@ function world(c,view,width,t){
     c.restore();
   }
 
-  c.fillStyle='#b28f79';c.font='12px sans-serif';c.fillText(currentStatus(),view+width/2,650);
-  c.fillStyle='#e1d0bb';c.fillRect(view+50,690,width-100,3);c.fillStyle='#c68585';c.fillRect(view+50,690,(width-100)*s.progress,3);
+  c.fillStyle='#6d8b96';c.font='12px sans-serif';c.fillText(currentStatus(),view+width/2,650);
+  c.fillStyle='#d9dfd3';c.fillRect(view+50,690,width-100,3);c.fillStyle='#88b2a9';c.fillRect(view+50,690,(width-100)*s.progress,3);
   c.restore();
 }
 let lastCountdown='';
@@ -300,7 +330,7 @@ let lastStatus='';function frame(t){
   cameraX=advanceCamera(cameraX,scene,side,room?.mode,t-lastFrame);lastFrame=t;
   if(!scene.done)finishAt=0;else if(!finishAt){finishAt=t;notify('붙어서 함께 이동해요! 계속 탭해주세요 ♥');}
   const {sceneWidth,view,scale,offsetY}=viewportLayout(canvas.width,canvas.height,side,room?.mode,cameraX,scene);
-  ctx.setTransform(1,0,0,1,0,0);const backdrop=ctx.createLinearGradient(0,0,0,canvas.height);backdrop.addColorStop(0,'#fff6f2');backdrop.addColorStop(1,'#f3e9e3');ctx.fillStyle=backdrop;ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.setTransform(1,0,0,1,0,0);const backdrop=ctx.createLinearGradient(0,0,0,canvas.height);backdrop.addColorStop(0,'#cfe9f7');backdrop.addColorStop(.65,'#f7f5e9');backdrop.addColorStop(1,'#f6f0df');ctx.fillStyle=backdrop;ctx.fillRect(0,0,canvas.width,canvas.height);
   ctx.setTransform(scale,0,0,scale,0,offsetY);world(ctx,view,sceneWidth,t);if($('overview').parentElement.open)world(overview,0,780,t);
   if(room){const s=state(room.left?.taps,room.right?.taps);$('score').textContent=`${room.left?.taps||0} : ${room.right?.taps||0}`;
     const seconds=room.startAt?Math.ceil((room.startAt+3000-now())/1000):0;

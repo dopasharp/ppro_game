@@ -15,5 +15,5 @@ test('browser handoff, reconnect and incomplete cached snapshots never show oppo
  assert.equal(roomStatus({...base,room,connected:false}),'재연결 중');
  assert.equal(roomStatus({...base,room:{left:room.left},seenOpponent:true}),'방 정보 동기화 중');
  assert.equal(roomStatus({...base,room:{left:room.left,startAt:1000}}),'방 정보 동기화 중');
- assert.equal(roomStatus({...base,room}),'탭하여 이동');
+ assert.equal(roomStatus({...base,room}),'');
 });

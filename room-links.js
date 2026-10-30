@@ -14,3 +14,8 @@ export function resumeSeat(player,uid,key,fallback=null){
   const current=player??fallback;
   return current&&key&&current.accessKey===key?{...current,uid}:null;
 }
+export function lobbyLink(base){
+  const url=new URL(base);url.hash='';
+  for(const key of ['side','seatKey'])url.searchParams.delete(key);
+  return url.href;
+}

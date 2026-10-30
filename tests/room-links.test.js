@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {roomLink,requestedSeat,authSession,seatAction,resumeSeat} from '../room-links.js';
+import {roomLink,requestedSeat,authSession,seatAction,resumeSeat,lobbyLink} from '../room-links.js';
 
 test('left and right links retain one room and keep emulator options',()=>{
  for(const side of ['left','right']){
@@ -9,6 +9,11 @@ test('left and right links retain one room and keep emulator options',()=>{
   assert.equal(url.searchParams.get('emulator'),'1');
  }
  assert.equal(requestedSeat('https://example.com/#abc'),null);
+});
+test('new-room navigation clears the previous seat credentials and room ID',()=>{
+ const url=new URL(lobbyLink(roomLink('https://example.com/play/?emulator=1','old','right','secret')));
+ assert.equal(url.hash,'');assert.equal(url.searchParams.has('seatKey'),false);
+ assert.equal(url.searchParams.has('side'),false);assert.equal(url.searchParams.get('emulator'),'1');
 });
 test('a valid seat link resumes from another browser without resetting progress',()=>{
  const player={uid:'old-browser',accessKey:'right-secret',round:3,taps:17,lastTap:12345};

@@ -7,5 +7,5 @@ export function roomStatus({room,side,loaded,connected,controlsSeat=true,seenOpp
   if(!room[opponent])return seenOpponent||room.startAt?'방 정보 동기화 중':'상대 대기 중';
   if(!room.startAt)return '시작 준비 중';
   if(now<room.startAt+3000)return '';
-  return (room.left?.taps||0)+(room.right?.taps||0)>=24?'':'탭하여 이동';
+  return '';
 }
