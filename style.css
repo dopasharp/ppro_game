@@ -23,3 +23,6 @@ body.playing{overflow:hidden;background:#fff6f2}
 
 .meeting-label{display:block;text-align:left;font-size:13px;color:#666;margin-top:22px;margin-bottom:7px}
 #meeting-message{display:block;width:100%;padding:12px;border:1px solid #ddd;border-radius:6px;background:white;font:inherit;font-size:14px;color:#58433e}
+
+.initials input,#meeting-message{font-size:16px}
+.playing #game{height:100%;height:100dvh}

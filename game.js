@@ -1,9 +1,11 @@
 export const WIDTH=390, HEIGHT=844, TOTAL=24;
 // Use one scale on both axes. Together screens meet at the same world seam.
 export function viewportLayout(width,height,side,mode,cameraX){
-  const sceneWidth=width/height*HEIGHT;
+  const scale=Math.min(width/WIDTH,height/HEIGHT);
+  const sceneWidth=width/scale;
+  const offsetY=(height-HEIGHT*scale)/2;
   const view=mode==='together'?(side==='left'?WIDTH-sceneWidth:WIDTH):cameraX-(sceneWidth-WIDTH)/2;
-  return {sceneWidth,view};
+  return {sceneWidth,view,scale,offsetY};
 }
 // Each bite opens and closes the mouth twice, then returns to rest.
 export function bitePose(elapsed){
@@ -13,6 +15,14 @@ export function bitePose(elapsed){
 export const LEFT_START=104, RIGHT_START=676, KISS_GAP=96;
 export const MIN_MEETING=LEFT_START+KISS_GAP/2, MAX_MEETING=RIGHT_START-KISS_GAP/2;
 export const STEP=(RIGHT_START-LEFT_START-KISS_GAP)/TOTAL;
+// Extend the walking distance on wide together screens without widening sprites.
+export function roadLayout(scene,width,mode){
+  const stretch=mode==='together'?Math.max(1,(width/2-KISS_GAP/2)/(WIDTH-LEFT_START-KISS_GAP/2)):1;
+  const center=x=>WIDTH+(x-WIDTH)*stretch;
+  const left=x=>center(x)+(stretch-1)*KISS_GAP/2;
+  const right=x=>center(x)-(stretch-1)*KISS_GAP/2;
+  return {...scene,leftX:left(scene.leftX),rightX:right(scene.rightX),meeting:center(scene.meeting),leftMarker:left(LEFT_START)-69,rightMarker:right(RIGHT_START)+69};
+}
 export function state(left=0,right=0){
   const done=left+right>=TOTAL;
   const rawMeeting=(LEFT_START+RIGHT_START+(left-right)*STEP)/2;

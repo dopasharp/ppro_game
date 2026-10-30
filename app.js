@@ -1,5 +1,5 @@
 import {firebaseConfig,emulatorPorts} from './firebase-config.js';
-import {WIDTH,HEIGHT,TOTAL,state,canTap,advanceCamera,resetRound,bitePose,MIN_MEETING,MAX_MEETING,viewportLayout} from './game.js?v=16';
+import {WIDTH,HEIGHT,TOTAL,state,canTap,advanceCamera,resetRound,bitePose,MIN_MEETING,MAX_MEETING,viewportLayout,roadLayout} from './game.js?v=18';
 const $=id=>document.getElementById(id), canvas=$('canvas'),ctx=canvas.getContext('2d'),overview=$('overview').getContext('2d');
 let demoStarted=false,cameraX=0,cameraReady=false,lastFrame=0,finishAt=0,observedRound=null,resetBusy=false;
 let room=null,side='left',uid,db,api,connected=false,offset=0,busy=false,unsub=null,roomId=null,demo=false,lastInput=0,startBusy=false;
@@ -20,8 +20,8 @@ const now=()=>Date.now()+offset;
 function error(e){$('error').hidden=false;const permissionDenied=/permission.?denied/i.test(`${e?.code||''} ${e?.message||e}`);$('error').textContent=permissionDenied?'Firebase에서 방 저장을 거부했어요. Firebase Console → Realtime Database → 규칙에 프로젝트의 database.rules.json 전체를 붙여넣고 게시한 뒤 새 방을 만들어주세요.':typeof e==='string'?e:`연결을 확인해주세요: ${e.code||e.message}`;}
 function clearError(){$('error').hidden=true;}
 function showGame(){ document.body.classList.add('playing');$('lobby').hidden=true;$('game').hidden=false;$('invite').value=location.href;resize(); }
-function resize(){const w=window.innerWidth,h=window.innerHeight;const dpr=Math.min(devicePixelRatio||1,3);canvas.style.width='100%';canvas.style.height='100%';canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}
-addEventListener('resize',resize);$('scale').oninput=resize;
+function resize(){const bounds=$('stage').getBoundingClientRect(),w=bounds.width||window.innerWidth,h=bounds.height||window.innerHeight;const dpr=Math.min(devicePixelRatio||1,3);canvas.style.width='100%';canvas.style.height='100%';canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}
+addEventListener('resize',resize);window.visualViewport?.addEventListener('resize',resize);new ResizeObserver(resize).observe($('stage'));$('scale').oninput=resize;
 async function firebase(){
   if(api)return;
   if(firebaseConfig.apiKey==='REPLACE_ME')throw new Error('firebase-config.js에 Firebase 설정을 입력해주세요. 혼자 미리 해보기는 설정 없이 가능합니다.');
@@ -120,7 +120,7 @@ function scenery(c,view,width,t){
   c.restore();
 }
 function world(c,view,width,t){
-  const l=room?.left?.taps||0,r=room?.right?.taps||0,s=state(l,r),waiting=!room?.right;
+  const l=room?.left?.taps||0,r=room?.right?.taps||0,s=roadLayout(state(l,r),width,room?.mode),waiting=!room?.right;
   c.save();c.beginPath();c.rect(0,0,width,HEIGHT);c.clip();c.translate(-view,0);
   scenery(c,view,width,t);
   if(room?.mode!=='remote'){c.strokeStyle='#c0a98a';c.lineWidth=1;c.setLineDash([3,8]);c.beginPath();c.moveTo(390,140);c.lineTo(390,710);c.stroke();c.setLineDash([]);}
@@ -128,7 +128,7 @@ function world(c,view,width,t){
   
   c.fillStyle='#e3d5bd';c.beginPath();c.ellipse(s.leftX,548,49,10,0,0,Math.PI*2);c.ellipse(s.rightX,548,49,10,0,0,Math.PI*2);c.fill();
   // Matching chocolate-heart markers frame the little candy path.
-  for(const [x,direction] of [[35,1],[745,-1]]){
+  for(const [x,direction] of [[s.leftMarker,1],[s.rightMarker,-1]]){
     c.save();c.translate(x,0);
     c.fillStyle='#e8d0bf';c.fillRect(-4,447,8,92);
     c.strokeStyle='#f9e6d6';c.lineWidth=2;
@@ -181,7 +181,7 @@ function world(c,view,width,t){
       c.fillText(i%2?'♥':'✧',s.meeting+Math.sin(i*2.4+elapsed/1700)*70,435-phase*125);
     }
     c.globalAlpha=1;c.fillStyle='#bb507d';c.font='bold 17px system-ui';
-    const message=room?.meetingMessage??'우리 만났어요! ♥';
+    const message=elapsed<3000?(room?.meetingMessage??'우리 만났어요! ♥'):'';
     const lines=[];let line='';
     for(const character of message){
       if(line&&c.measureText(line+character).width>240){lines.push(line);line='';}
@@ -217,8 +217,9 @@ let lastStatus='';function frame(t){
   if(!cameraReady){cameraX=side==='left'?0:WIDTH;cameraReady=true;}
   cameraX=advanceCamera(cameraX,scene,side,room?.mode,t-lastFrame);lastFrame=t;
   if(!scene.done)finishAt=0;else if(!finishAt){finishAt=t;notify('붙어서 함께 이동해요! 계속 탭해주세요 ♥');}
-  const {sceneWidth,view}=viewportLayout(canvas.width,canvas.height,side,room?.mode,cameraX);
-  const scale=canvas.height/HEIGHT;ctx.setTransform(scale,0,0,scale,0,0);world(ctx,view,sceneWidth,t);if($('overview').parentElement.open)world(overview,0,780,t);
+  const {sceneWidth,view,scale,offsetY}=viewportLayout(canvas.width,canvas.height,side,room?.mode,cameraX);
+  ctx.setTransform(1,0,0,1,0,0);const backdrop=ctx.createLinearGradient(0,0,0,canvas.height);backdrop.addColorStop(0,'#fff6f2');backdrop.addColorStop(1,'#f3e9e3');ctx.fillStyle=backdrop;ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.setTransform(scale,0,0,scale,0,offsetY);world(ctx,view,sceneWidth,t);if($('overview').parentElement.open)world(overview,0,780,t);
   if(room){const s=state(room.left?.taps,room.right?.taps);$('score').textContent=`${room.left?.taps||0} : ${room.right?.taps||0}`;
     const seconds=room.startAt?Math.ceil((room.startAt+3000-now())/1000):0;
     const text=!connected?'재연결 중':!room.right?'상대 대기 중':seconds>0?`${seconds} · 준비!`:s.done?'':'탭하여 이동';if(text!==lastStatus){$('status').textContent=text;lastStatus=text;}}
