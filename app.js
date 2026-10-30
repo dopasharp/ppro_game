@@ -1,3 +1,4 @@
+import {writeLink} from './clipboard.js?v=23';
 import {firebaseConfig,emulatorPorts} from './firebase-config.js';
 import {WIDTH,HEIGHT,TOTAL,state,canTap,advanceCamera,resetRound,bitePose,MIN_MEETING,MAX_MEETING,viewportLayout,roadLayout} from './game.js?v=18';
 const $=id=>document.getElementById(id), canvas=$('canvas'),ctx=canvas.getContext('2d'),overview=$('overview').getContext('2d');
@@ -12,15 +13,14 @@ const initials=()=>({left:$('my-initial').value.trim().toUpperCase().slice(0,6),
 let noticeTimer;
 let wallEdge=null,wallUntil=0;
 function notify(message){clearTimeout(noticeTimer);$('notice').textContent=message;$('notice').hidden=false;noticeTimer=setTimeout(()=>$('notice').hidden=true,5000);}
-async function copyInvite(){
-  try{await navigator.clipboard.writeText(location.href);notify('링크가 복사되었습니다. 상대에게 공유해주세요!');}
-  catch{
-    const field=document.createElement('textarea');field.value=location.href;field.readOnly=true;
-    field.style.cssText='position:fixed;left:-9999px;top:0;opacity:0';document.body.append(field);
-    let copied=false;try{field.select();copied=document.execCommand('copy');}catch{}finally{field.remove();}
-    notify(copied?'링크가 복사되었습니다. 상대에게 공유해주세요!':'복사하지 못했어요. 상단 링크 다시 복사 버튼을 눌러주세요.');
-  }
+function copiedNotice(copied){notify(copied?'링크가 복사되었습니다. 상대에게 공유해주세요!':'브라우저에서 복사를 허용하지 않았어요. 상단 링크 다시 복사 버튼을 눌러주세요.');}
+async function copyInvite(){copiedNotice(await writeLink(location.href));}
+function createRoom(mode){
+  const id=newRoom(),link=new URL(location.href);link.hash=id;
+  const copying=writeLink(link.href);
+  return enter(id,true,mode,copying);
 }
+
 const now=()=>Date.now()+offset;
 function error(e){$('error').hidden=false;const permissionDenied=/permission.?denied/i.test(`${e?.code||''} ${e?.message||e}`);$('error').textContent=permissionDenied?'Firebase에서 방 저장을 거부했어요. Firebase Console → Realtime Database → 규칙에 프로젝트의 database.rules.json 전체를 붙여넣고 게시한 뒤 새 방을 만들어주세요.':typeof e==='string'?e:`연결을 확인해주세요: ${e.code||e.message}`;}
 function clearError(){$('error').hidden=true;}
@@ -38,22 +38,22 @@ async function firebase(){
   c.onValue(c.ref(db,'.info/connected'),s=>{connected=!!s.val();$('connection').textContent=connected?'연결됨':'재연결 중';});
 }
 function roomRef(path=''){return api.ref(db,`rooms/${roomId}${path?'/'+path:''}`);}
-async function enter(id,create=false,mode='remote'){
+async function enter(id,create=false,mode='remote',copying=null){
   clearError();for(const id of ['create-together','create-remote','demo'])$(id).disabled=true;
   try{await firebase();roomId=id;demo=false;cameraReady=false;finishAt=0;
     if(create){await api.set(roomRef(),{mode,initials:initials(),meetingMessage:$('meeting-message').value.trim().slice(0,40),round:0,createdAt:api.serverTimestamp(),left:{uid,round:0,taps:0,lastTap:0}});}
     else{const snapshot=await api.get(roomRef());const r=snapshot.val();if(!r)throw new Error('방이 없어요. 새 방을 만들어주세요.');
       if(r.left.uid!==uid&&r.right?.uid!==uid){const claim=await api.runTransaction(roomRef('right'),v=>v?undefined:{uid,round:r.round??0,taps:0,lastTap:0},{applyLocally:false});if(!claim.committed)throw new Error('이미 두 명이 들어온 방이에요. 새 방을 만들어주세요.');}}
     history.replaceState(null,'',`${location.pathname}${location.search}#${roomId}`);showGame();
-    if(create)await copyInvite();
+    if(create){$('share').hidden=false;copiedNotice(copying?await copying:await writeLink(location.href));}
     if(unsub)unsub();unsub=api.onValue(roomRef(),snapshot=>{room=snapshot.val();if(!room){error('방이 삭제되었어요. 새 게임을 시작해주세요.');return;}const assignedSide=room.left.uid===uid?'left':'right';if(assignedSide!==side)cameraReady=false;side=assignedSide;
       if(room.right&&!room.startAt&&!startBusy){startBusy=true;api.runTransaction(roomRef('startAt'),v=>v??api.serverTimestamp(),{applyLocally:false}).catch(error).finally(()=>startBusy=false);}
     },error);
   }catch(e){error(e);}finally{for(const id of ['create-together','create-remote','demo'])$(id).disabled=false;}
 }
 function newRoom(){const bytes=crypto.getRandomValues(new Uint8Array(16));return [...bytes].map(x=>x.toString(16).padStart(2,'0')).join('');}
-$('create-together').onclick=()=>enter(newRoom(),true,'together');
-$('create-remote').onclick=()=>enter(newRoom(),true,'remote');
+$('create-together').onclick=()=>createRoom('together');
+$('create-remote').onclick=()=>createRoom('remote');
 function resetPresentation(){wallEdge=null;wallUntil=0;cameraReady=false;finishAt=0;lastInput=0;demoStarted=false;for(const a of Object.values(animation)){a.taps=0;a.at=-Infinity;}}
 $('new').onclick=async()=>{
   if(!room||resetBusy)return;clearError();
@@ -85,17 +85,17 @@ function bear(c,name,x,flip,frame,row){
 }
 function pepero(c,s,left,right){
   const img=images.pepero;if(!img.complete||!img.naturalWidth)return;
-  const flavor=roomId?parseInt(roomId.slice(0,8),16)%5:0;
-  const [sx,sy,sw,sh]=spriteMeta.pepero[flavor];
+  const [sx,sy,sw,sh]=spriteMeta.pepero[0];
+  const chocolateX=sx+sw*.18,chocolateWidth=sw*.75;
   const gap=s.rightX-s.leftX-96;
   if(gap<=.01)return;
   // Tile at one uniform scale; longer tablet roads add length, never distortion.
-  const height=18,tileWidth=sw/sh*height;
+  const height=18,tileWidth=chocolateWidth/sh*height;
   const origin=roadLayout(state(),s.roadWidth,room?.mode).leftX+48;
   const start=s.leftX+48,end=start+gap;
   c.save();c.beginPath();c.rect(start,477-height/2,gap,height);c.clip();
   for(let x=origin+Math.floor((start-origin)/tileWidth)*tileWidth;x<end;x+=tileWidth){
-    c.drawImage(img,sx,sy,sw,sh,x,477-height/2,tileWidth,height);
+    c.drawImage(img,chocolateX,sy,chocolateWidth,sh,x,477-height/2,tileWidth,height);
   }
   c.restore();
 }
@@ -138,7 +138,9 @@ function world(c,view,width,t){
   if(room?.mode!=='remote'){c.strokeStyle='#c0a98a';c.lineWidth=1;c.setLineDash([3,8]);c.beginPath();c.moveTo(390,140);c.lineTo(390,710);c.stroke();c.setLineDash([]);}
   c.textAlign='center';
   
-  c.fillStyle='#e3d5bd';c.beginPath();c.ellipse(s.leftX,548,49,10,0,0,Math.PI*2);c.ellipse(s.rightX,548,49,10,0,0,Math.PI*2);c.fill();
+  const showLeft=room?.mode!=='remote'||side==='left'||s.done;
+  const showRight=room?.mode!=='remote'||side==='right'||s.done;
+  c.fillStyle='#e3d5bd';c.beginPath();if(showLeft)c.ellipse(s.leftX,548,49,10,0,0,Math.PI*2);if(showRight)c.ellipse(s.rightX,548,49,10,0,0,Math.PI*2);c.fill();
   // Matching chocolate-heart markers frame the little candy path.
   for(const [x,direction] of [[s.leftMarker,1],[s.rightMarker,-1]]){
     c.save();c.translate(x,0);
@@ -160,9 +162,10 @@ function world(c,view,width,t){
   }
   pepero(c,s,l,r);
   const animationTime=now(),leftPose=pose('left',l,animationTime),rightPose=pose('right',r,animationTime);
-  bear(c,'cream',s.leftX,false,leftPose.frame,leftPose.row);
-  bear(c,'pink',s.rightX,true,rightPose.frame,rightPose.row);
+  if(showLeft)bear(c,'cream',s.leftX,false,leftPose.frame,leftPose.row);
+  if(showRight)bear(c,'pink',s.rightX,true,rightPose.frame,rightPose.row);
   for(const [seat,x] of [['left',s.leftX],['right',s.rightX]]){
+    if((seat==='left'&&!showLeft)||(seat==='right'&&!showRight))continue;
     const label=room?.initials?.[seat];if(!label)continue;
     c.font='bold 13px system-ui';
     const labelWidth=c.measureText(label).width+20;
