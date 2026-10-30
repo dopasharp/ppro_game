@@ -16,6 +16,28 @@ test('phone and tablet views preserve sprite proportions and join at the seam',(
   }
 });
 
+test('remote tablet roads start with the opponent offscreen and reveal both on approach',()=>{
+ for(const [w,h] of [[390,844],[768,1024],[1024,768]]){
+  for(const side of ['left','right']){
+   const camera=side==='left'?0:WIDTH;
+   const layout=viewportLayout(w,h,side,'remote',camera);
+   const initial=roadLayout(state(),layout.sceneWidth,'remote');
+   const own=side==='left'?initial.leftX:initial.rightX;
+   const opponent=side==='left'?initial.rightX:initial.leftX;
+   assert.ok(own-48>=layout.view&&own+48<=layout.view+layout.sceneWidth);
+   assert.ok(opponent+48<layout.view||opponent-48>layout.view+layout.sceneWidth);
+   const near=roadLayout(state(11,11),layout.sceneWidth,'remote');
+   const approach=viewportLayout(w,h,side,'remote',WIDTH/2);
+   assert.ok(near.leftX-48>=approach.view&&near.rightX+48<=approach.view+approach.sceneWidth);
+   for(const scene of [state(12,12),state(24,0),state(0,24)]){
+    const joined=roadLayout(scene,layout.sceneWidth,'remote');
+    const final=viewportLayout(w,h,side,'remote',camera,scene);
+    assert.ok(joined.leftX-48>=final.view&&joined.rightX+48<=final.view+final.sceneWidth);
+   }
+  }
+ }
+});
+
 test('wide together screens center starting bears while preserving contact spacing',()=>{
  for(const width of [768,1125,1500]){
   const start=roadLayout(state(),width,'together');

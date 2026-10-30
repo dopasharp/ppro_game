@@ -1,6 +1,6 @@
 import {writeLink} from './clipboard.js?v=23';
 import {firebaseConfig,emulatorPorts} from './firebase-config.js';
-import {WIDTH,HEIGHT,TOTAL,state,canTap,advanceCamera,resetRound,bitePose,MIN_MEETING,MAX_MEETING,viewportLayout,roadLayout} from './game.js?v=18';
+import {WIDTH,HEIGHT,TOTAL,state,canTap,advanceCamera,resetRound,bitePose,MIN_MEETING,MAX_MEETING,viewportLayout,roadLayout} from './game.js?v=25';
 const $=id=>document.getElementById(id), canvas=$('canvas'),ctx=canvas.getContext('2d'),overview=$('overview').getContext('2d');
 let demoStarted=false,cameraX=0,cameraReady=false,lastFrame=0,finishAt=0,observedRound=null,resetBusy=false;
 let room=null,side='left',uid,db,api,connected=false,offset=0,busy=false,unsub=null,roomId=null,demo=false,lastInput=0,startBusy=false;
@@ -14,10 +14,11 @@ let noticeTimer;
 let wallEdge=null,wallUntil=0;
 function notify(message){clearTimeout(noticeTimer);$('notice').textContent=message;$('notice').hidden=false;noticeTimer=setTimeout(()=>$('notice').hidden=true,5000);}
 function copiedNotice(copied){notify(copied?'링크가 복사되었습니다. 상대에게 공유해주세요!':'브라우저에서 복사를 허용하지 않았어요. 상단 링크 다시 복사 버튼을 눌러주세요.');}
-async function copyInvite(){copiedNotice(await writeLink(location.href));}
+function invitationURL(id=roomId){const link=new URL(location.href);link.searchParams.set('v','26');if(id)link.hash=id;return link.href;}
+async function copyInvite(){copiedNotice(await writeLink(invitationURL()));}
 function createRoom(mode){
-  const id=newRoom(),link=new URL(location.href);link.hash=id;
-  const copying=writeLink(link.href);
+  const id=newRoom();
+  const copying=writeLink(invitationURL(id));
   return enter(id,true,mode,copying);
 }
 
@@ -45,7 +46,7 @@ async function enter(id,create=false,mode='remote',copying=null){
     else{const snapshot=await api.get(roomRef());const r=snapshot.val();if(!r)throw new Error('방이 없어요. 새 방을 만들어주세요.');
       if(r.left.uid!==uid&&r.right?.uid!==uid){const claim=await api.runTransaction(roomRef('right'),v=>v?undefined:{uid,round:r.round??0,taps:0,lastTap:0},{applyLocally:false});if(!claim.committed)throw new Error('이미 두 명이 들어온 방이에요. 새 방을 만들어주세요.');}}
     history.replaceState(null,'',`${location.pathname}${location.search}#${roomId}`);showGame();
-    if(create){$('share').hidden=false;copiedNotice(copying?await copying:await writeLink(location.href));}
+    if(create){$('share').hidden=false;copiedNotice(copying?await copying:await writeLink(invitationURL()));}
     if(unsub)unsub();unsub=api.onValue(roomRef(),snapshot=>{room=snapshot.val();if(!room){error('방이 삭제되었어요. 새 게임을 시작해주세요.');return;}const assignedSide=room.left.uid===uid?'left':'right';if(assignedSide!==side)cameraReady=false;side=assignedSide;
       if(room.right&&!room.startAt&&!startBusy){startBusy=true;api.runTransaction(roomRef('startAt'),v=>v??api.serverTimestamp(),{applyLocally:false}).catch(error).finally(()=>startBusy=false);}
     },error);
@@ -138,9 +139,7 @@ function world(c,view,width,t){
   if(room?.mode!=='remote'){c.strokeStyle='#c0a98a';c.lineWidth=1;c.setLineDash([3,8]);c.beginPath();c.moveTo(390,140);c.lineTo(390,710);c.stroke();c.setLineDash([]);}
   c.textAlign='center';
   
-  const showLeft=room?.mode!=='remote'||side==='left'||s.done;
-  const showRight=room?.mode!=='remote'||side==='right'||s.done;
-  c.fillStyle='#e3d5bd';c.beginPath();if(showLeft)c.ellipse(s.leftX,548,49,10,0,0,Math.PI*2);if(showRight)c.ellipse(s.rightX,548,49,10,0,0,Math.PI*2);c.fill();
+  c.fillStyle='#e3d5bd';c.beginPath();c.ellipse(s.leftX,548,49,10,0,0,Math.PI*2);c.ellipse(s.rightX,548,49,10,0,0,Math.PI*2);c.fill();
   // Matching chocolate-heart markers frame the little candy path.
   for(const [x,direction] of [[s.leftMarker,1],[s.rightMarker,-1]]){
     c.save();c.translate(x,0);
@@ -162,10 +161,9 @@ function world(c,view,width,t){
   }
   pepero(c,s,l,r);
   const animationTime=now(),leftPose=pose('left',l,animationTime),rightPose=pose('right',r,animationTime);
-  if(showLeft)bear(c,'cream',s.leftX,false,leftPose.frame,leftPose.row);
-  if(showRight)bear(c,'pink',s.rightX,true,rightPose.frame,rightPose.row);
+  bear(c,'cream',s.leftX,false,leftPose.frame,leftPose.row);
+  bear(c,'pink',s.rightX,true,rightPose.frame,rightPose.row);
   for(const [seat,x] of [['left',s.leftX],['right',s.rightX]]){
-    if((seat==='left'&&!showLeft)||(seat==='right'&&!showRight))continue;
     const label=room?.initials?.[seat];if(!label)continue;
     c.font='bold 13px system-ui';
     const labelWidth=c.measureText(label).width+20;
@@ -232,7 +230,7 @@ let lastStatus='';function frame(t){
   if(!cameraReady){cameraX=side==='left'?0:WIDTH;cameraReady=true;}
   cameraX=advanceCamera(cameraX,scene,side,room?.mode,t-lastFrame);lastFrame=t;
   if(!scene.done)finishAt=0;else if(!finishAt){finishAt=t;notify('붙어서 함께 이동해요! 계속 탭해주세요 ♥');}
-  const {sceneWidth,view,scale,offsetY}=viewportLayout(canvas.width,canvas.height,side,room?.mode,cameraX);
+  const {sceneWidth,view,scale,offsetY}=viewportLayout(canvas.width,canvas.height,side,room?.mode,cameraX,scene);
   ctx.setTransform(1,0,0,1,0,0);const backdrop=ctx.createLinearGradient(0,0,0,canvas.height);backdrop.addColorStop(0,'#fff6f2');backdrop.addColorStop(1,'#f3e9e3');ctx.fillStyle=backdrop;ctx.fillRect(0,0,canvas.width,canvas.height);
   ctx.setTransform(scale,0,0,scale,0,offsetY);world(ctx,view,sceneWidth,t);if($('overview').parentElement.open)world(overview,0,780,t);
   if(room){const s=state(room.left?.taps,room.right?.taps);$('score').textContent=`${room.left?.taps||0} : ${room.right?.taps||0}`;

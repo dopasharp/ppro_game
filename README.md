@@ -1,4 +1,4 @@
-# ppro game
+# 빼빼로게임
 
 GitHub Pages + Firebase Realtime Database의 2인용 탭 게임입니다.
 
