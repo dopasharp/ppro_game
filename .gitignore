@@ -1,0 +1,9 @@
+node_modules/
+*-debug.log
+.firebase/
+
+/pepero-kiss/
+/pepero-kiss (2)/
+.env
+.env.*
+serviceAccount*.json
