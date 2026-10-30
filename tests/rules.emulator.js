@@ -33,8 +33,8 @@ test('RTDB permissions, seat ownership, countdown, rate and shared finish',async
  await assertFails(set(ref(a,path),null));
  await env.withSecurityRulesDisabled(async ctx=>{await set(ref(ctx.database(),path+'/left'),{uid:'alice',round:0,taps:12,lastTap:0});await set(ref(ctx.database(),path+'/right'),{uid:'bob',round:0,taps:11,lastTap:0});});
  const results=await Promise.allSettled([runTransaction(ref(a,path+'/left'),()=>({uid:'alice',round:0,taps:13,lastTap:serverTimestamp()}),{applyLocally:false}),runTransaction(ref(b,path+'/right'),()=>({uid:'bob',round:0,taps:12,lastTap:serverTimestamp()}),{applyLocally:false})]);
- if(results.filter(x=>x.status==='fulfilled'&&x.value.committed).length!==1)throw new Error('Exactly one final tap must commit');
- const final=(await get(ref(a,path))).val();if(final.left.taps+final.right.taps!==24)throw new Error('Invalid total');
+ if(results.filter(x=>x.status==='fulfilled'&&x.value.committed).length!==2)throw new Error('Both taps must commit across meeting');
+ const final=(await get(ref(a,path))).val();if(final.left.taps+final.right.taps!==25)throw new Error('Invalid total');
  const restarted=resetRound(final,serverTimestamp());
  await assertFails(set(ref(c,path),restarted));
  await assertFails(set(ref(a,path),{...restarted,mode:'together'}));

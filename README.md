@@ -1,4 +1,4 @@
-# Pepero Kiss
+# ppro game
 
 GitHub Pages + Firebase Realtime Database의 2인용 탭 게임입니다.
 

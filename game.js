@@ -1,12 +1,21 @@
 export const WIDTH=390, HEIGHT=844, TOTAL=24;
-export const LEFT_START=46, RIGHT_START=734, KISS_GAP=96;
+// Each bite opens and closes the mouth twice, then returns to rest.
+export function bitePose(elapsed){
+  const chewing=elapsed>=0&&elapsed<480;
+  return {frame:chewing?Math.floor(elapsed/120)%4:0,row:chewing&&Math.floor(elapsed/120)%2===0?1:0};
+}
+export const LEFT_START=104, RIGHT_START=676, KISS_GAP=96;
+export const MIN_MEETING=LEFT_START+KISS_GAP/2, MAX_MEETING=RIGHT_START-KISS_GAP/2;
 export const STEP=(RIGHT_START-LEFT_START-KISS_GAP)/TOTAL;
 export function state(left=0,right=0){
-  const leftX=LEFT_START+left*STEP, rightX=RIGHT_START-right*STEP;
-  const meeting=(leftX+rightX)/2;
+  const done=left+right>=TOTAL;
+  const rawMeeting=(LEFT_START+RIGHT_START+(left-right)*STEP)/2;
+  const meeting=done?Math.max(MIN_MEETING,Math.min(MAX_MEETING,rawMeeting)):rawMeeting;
+  const leftX=done?meeting-KISS_GAP/2:LEFT_START+left*STEP;
+  const rightX=done?meeting+KISS_GAP/2:RIGHT_START-right*STEP;
   return {progress:Math.min(1,(left+right)/TOTAL),meeting,leftX,rightX,done:left+right>=TOTAL,winner:left===right?'tie':left>right?'left':'right',meetingSide:Math.abs(meeting-WIDTH)<1e-9?'tie':meeting<WIDTH?'left':'right'};
 }
-export function canTap(room,now){return !!room?.startAt && now>=room.startAt && !state(room.left?.taps,room.right?.taps).done;}
+export function canTap(room,now){return !!room?.startAt && now>=room.startAt;}
 // Cameras are local presentation; gameplay state remains shared tap counters.
 export function cameraTarget(s,side,mode='together'){
   const clamp=x=>Math.max(0,Math.min(WIDTH,x));
@@ -19,6 +28,7 @@ export function advanceCamera(current,s,side,mode,deltaMs){
   if(mode!=='remote')return target;
   const blend=1-Math.exp(-Math.max(0,Math.min(deltaMs,100))/125);
   let next=current+(target-current)*blend;
+  if(s.done)return Math.max(s.rightX+48-WIDTH,Math.min(s.leftX-48,next));
   // Keep the subject visible even when snapshots jump after reconnection.
   const low=s.done?s.rightX+48-WIDTH:(side==='left'?s.leftX:s.rightX)+48-WIDTH;
   const high=s.done?s.leftX-48:(side==='left'?s.leftX:s.rightX)-48;
