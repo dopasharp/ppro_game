@@ -1,6 +1,7 @@
+import {roomLink,requestedSeat,authSession,seatAction,resumeSeat} from './room-links.js?v=34';
 import {writeLink} from './clipboard.js?v=23';
 import {firebaseConfig,emulatorPorts} from './firebase-config.js';
-import {WIDTH,HEIGHT,TOTAL,state,canTap,advanceCamera,resetRound,bitePose,MIN_MEETING,MAX_MEETING,viewportLayout,roadLayout} from './game.js?v=29';
+import {WIDTH,HEIGHT,TOTAL,state,canTap,advanceCamera,resetRound,bitePose,MIN_MEETING,MAX_MEETING,viewportLayout,roadLayout} from './game.js?v=32';
 const $=id=>document.getElementById(id), canvas=$('canvas'),ctx=canvas.getContext('2d'),overview=$('overview').getContext('2d');
 let demoStarted=false,cameraX=0,cameraReady=false,lastFrame=0,finishAt=0,observedRound=null,resetBusy=false;
 let room=null,side='left',uid,db,api,connected=false,offset=0,busy=false,unsub=null,roomId=null,demo=false,lastInput=0,startBusy=false;
@@ -11,13 +12,14 @@ const animation={left:{taps:0,at:-Infinity},right:{taps:0,at:-Infinity}};
 function pose(player,taps,time){const a=animation[player];if(a.taps!==taps){a.taps=taps;a.at=time;}return bitePose(time-a.at);}
 const initials=()=>({left:$('my-initial').value.trim().toUpperCase().slice(0,6),right:$('partner-initial').value.trim().toUpperCase().slice(0,6)});
 let noticeTimer;
+let seatKeys=null,controlsSeat=true;
 let wallEdge=null,wallUntil=0;
 function notify(message){clearTimeout(noticeTimer);$('notice').textContent=message;$('notice').hidden=false;noticeTimer=setTimeout(()=>$('notice').hidden=true,5000);}
 function copiedNotice(copied){notify(copied?'링크가 복사되었습니다. 상대에게 공유해주세요!':'브라우저에서 복사를 허용하지 않았어요. 상단 링크 다시 복사 버튼을 눌러주세요.');}
-function invitationURL(id=roomId){const link=new URL(location.href);link.searchParams.set('v','26');if(id)link.hash=id;return link.href;}
-async function copyInvite(){copiedNotice(await writeLink(invitationURL()));}
+function invitationURL(id=roomId,seat='right'){return roomLink(location.href,id,seat,seatKeys?.[seat]);}
+async function copyInvite(seat='right'){const copied=await writeLink(invitationURL(roomId,seat));if(copied)notify(`${seat==='left'?'왼쪽':'오른쪽'} 링크가 복사되었습니다.${seat==='right'?' 상대에게 공유해주세요!':' 내 자리로 돌아올 때 사용해주세요.'}`);else copiedNotice(false);}
 function createRoom(mode){
-  const id=newRoom();
+  const id=newRoom();seatKeys={left:newRoom(),right:newRoom()};
   const copying=writeLink(invitationURL(id));
   return enter(id,true,mode,copying);
 }
@@ -28,27 +30,37 @@ function clearError(){$('error').hidden=true;}
 function showGame(){ document.body.classList.add('playing');$('lobby').hidden=true;$('game').hidden=false;resize(); }
 function resize(){const bounds=$('stage').getBoundingClientRect(),w=bounds.width||window.innerWidth,h=bounds.height||window.innerHeight;const dpr=Math.min(devicePixelRatio||1,3);canvas.style.width='100%';canvas.style.height='100%';canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}
 addEventListener('resize',resize);window.visualViewport?.addEventListener('resize',resize);new ResizeObserver(resize).observe($('stage'));$('scale').oninput=resize;
-async function firebase(){
-  if(api)return;
+let activeAuthSession=null,infoStops=[];
+async function firebase(session='[DEFAULT]'){
+  if(api&&activeAuthSession===session)return;
+  if(unsub){unsub();unsub=null;}for(const stop of infoStops)stop();infoStops=[];connected=false;
   if(firebaseConfig.apiKey==='REPLACE_ME')throw new Error('firebase-config.js에 Firebase 설정을 입력해주세요. 혼자 미리 해보기는 설정 없이 가능합니다.');
   const [a,b,c]=await Promise.all([import('https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js'),import('https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js'),import('https://www.gstatic.com/firebasejs/12.0.0/firebase-database.js')]);
-  const app=a.initializeApp(firebaseConfig),auth=b.getAuth(app);db=c.getDatabase(app);
+  const app=a.getApps().find(app=>app.name===session)||a.initializeApp(firebaseConfig,session),auth=b.getAuth(app);db=c.getDatabase(app);
   if(new URLSearchParams(location.search).has('emulator')&&['localhost','127.0.0.1'].includes(location.hostname)){b.connectAuthEmulator(auth,`http://127.0.0.1:${emulatorPorts.auth}`,{disableWarnings:true});c.connectDatabaseEmulator(db,'127.0.0.1',emulatorPorts.database);}
-  await b.setPersistence(auth,b.browserLocalPersistence);uid=(await b.signInAnonymously(auth)).user.uid;api=c;
-  c.onValue(c.ref(db,'.info/serverTimeOffset'),s=>offset=s.val()||0);
-  c.onValue(c.ref(db,'.info/connected'),s=>{connected=!!s.val();$('connection').textContent=connected?'연결됨':'재연결 중';});
+  await b.setPersistence(auth,b.browserLocalPersistence);uid=(auth.currentUser||await b.signInAnonymously(auth).then(result=>result.user)).uid;api=c;activeAuthSession=session;
+  infoStops.push(c.onValue(c.ref(db,'.info/serverTimeOffset'),s=>offset=s.val()||0));
+  infoStops.push(c.onValue(c.ref(db,'.info/connected'),s=>{connected=!!s.val();$('connection').textContent=connected?'연결됨':'재연결 중';}));
 }
 function roomRef(path=''){return api.ref(db,`rooms/${roomId}${path?'/'+path:''}`);}
 async function enter(id,create=false,mode='remote',copying=null){
   clearError();for(const id of ['create-together','create-remote','demo'])$(id).disabled=true;
-  try{await firebase();roomId=id;demo=false;cameraReady=false;finishAt=0;
-    if(create){await api.set(roomRef(),{mode,initials:initials(),meetingMessage:$('meeting-message').value.trim().slice(0,40),round:0,createdAt:api.serverTimestamp(),left:{uid,round:0,taps:0,lastTap:0}});}
+  const selectedSeat=create?'left':requestedSeat(location.href);
+  try{roomId=id;side=selectedSeat||'right';await firebase(authSession(id,selectedSeat));demo=false;cameraReady=false;finishAt=0;
+    if(create){await api.set(roomRef(),{mode,seatKeys,initials:initials(),meetingMessage:$('meeting-message').value.trim().slice(0,40),round:0,createdAt:api.serverTimestamp(),left:{uid,accessKey:seatKeys.left,round:0,taps:0,lastTap:0}});}
     else{const snapshot=await api.get(roomRef());const r=snapshot.val();if(!r)throw new Error('방이 없어요. 새 방을 만들어주세요.');
-      if(r.left.uid!==uid&&r.right?.uid!==uid){const claim=await api.runTransaction(roomRef('right'),v=>v?undefined:{uid,round:r.round??0,taps:0,lastTap:0},{applyLocally:false});if(!claim.committed)throw new Error('이미 두 명이 들어온 방이에요. 새 방을 만들어주세요.');}}
-    history.replaceState(null,'',`${location.pathname}${location.search}#${roomId}`);showGame();
-    if(create){$('share').hidden=false;copiedNotice(copying?await copying:await writeLink(invitationURL()));}
-    if(unsub)unsub();unsub=api.onValue(roomRef(),snapshot=>{room=snapshot.val();if(!room){error('방이 삭제되었어요. 새 게임을 시작해주세요.');return;}const assignedSide=room.left.uid===uid?'left':'right';if(assignedSide!==side)cameraReady=false;side=assignedSide;
-      if(room.right&&!room.startAt&&!startBusy){startBusy=true;api.runTransaction(roomRef('startAt'),v=>v??api.serverTimestamp(),{applyLocally:false}).catch(error).finally(()=>startBusy=false);}
+      const accessKey=new URL(location.href).searchParams.get('seatKey');
+      const action=seatAction(r,uid,selectedSeat,accessKey);seatKeys=r.seatKeys||null;
+      if(action==='invalid')throw new Error('자리 링크가 올바르지 않아요. 상단에서 복사한 전체 링크를 열어주세요.');
+      if(action==='resume'){const resumed=await api.runTransaction(roomRef(selectedSeat),p=>resumeSeat(p,uid,accessKey)??undefined,{applyLocally:false});if(!resumed.committed)throw new Error('자리 연결을 다시 시도해주세요.');side=selectedSeat;}
+      if(action==='occupied')throw new Error(`${selectedSeat==='left'?'왼쪽':selectedSeat==='right'?'오른쪽':'선택한'} 자리가 이미 사용 중이에요. 처음 입장했던 브라우저에서 해당 자리 링크를 다시 열어주세요. 다른 브라우저로 바꿨다면 새 방을 만들어주세요.`);
+      if(action==='claim'){const claim=await api.runTransaction(roomRef('right'),v=>v?undefined:{uid,...(seatKeys?{accessKey:seatKeys.right}:{}),round:r.round??0,taps:0,lastTap:0},{applyLocally:false});if(!claim.committed)throw new Error('오른쪽 자리에 다른 사람이 먼저 들어왔어요. 새 방을 만들어주세요.');side='right';}else if(action!=='resume')side=action;
+    }
+    history.replaceState(null,'',selectedSeat?invitationURL(roomId,side):`${location.pathname}${location.search}#${roomId}`);showGame();
+    $('share').hidden=false;$('share-left').hidden=false;
+    if(create){copiedNotice(copying?await copying:await writeLink(invitationURL()));}
+    if(unsub)unsub();unsub=api.onValue(roomRef(),snapshot=>{room=snapshot.val();if(!room){error('방이 삭제되었어요. 새 게임을 시작해주세요.');return;}const assignedSide=selectedSeat||(room.left.uid===uid?'left':'right');if(assignedSide!==side)cameraReady=false;side=assignedSide;controlsSeat=room[side]?.uid===uid;
+      if(controlsSeat&&room.right&&!room.startAt&&!startBusy){startBusy=true;api.runTransaction(roomRef('startAt'),v=>v??api.serverTimestamp(),{applyLocally:false}).catch(error).finally(()=>startBusy=false);}
     },error);
   }catch(e){error(e);}finally{for(const id of ['create-together','create-remote','demo'])$(id).disabled=false;}
 }
@@ -57,18 +69,19 @@ $('create-together').onclick=()=>createRoom('together');
 $('create-remote').onclick=()=>createRoom('remote');
 function resetPresentation(){wallEdge=null;wallUntil=0;cameraReady=false;finishAt=0;lastInput=0;demoStarted=false;for(const a of Object.values(animation)){a.taps=0;a.at=-Infinity;}}
 $('new').onclick=async()=>{
-  if(!room||resetBusy)return;clearError();
+  if(!room||resetBusy||(!demo&&!controlsSeat))return;clearError();
   if(demo){room=resetRound(room,now());resetPresentation();return;}
   if(!connected){error('다시 연결한 후 다시하기를 눌러주세요.');return;}
   if(!room.right){error('상대가 접속한 후 다시하기를 눌러주세요.');return;}
   const expectedRound=room.round??0,beforeReset=room;resetBusy=true;$('new').disabled=true;
   try{await api.runTransaction(roomRef(),r=>{const current=r??beforeReset;return (current.round??0)===expectedRound?resetRound(current,api.serverTimestamp())??undefined:undefined;},{applyLocally:false});}catch(e){error(e);}finally{resetBusy=false;$('new').disabled=false;}
 };
-$('share').onclick=copyInvite;
-$('demo').onclick=()=>{clearError();demo=true;demoStarted=false;cameraReady=false;finishAt=0;connected=true;roomId=null;room={mode:'remote',initials:initials(),meetingMessage:$('meeting-message').value.trim().slice(0,40),round:0,left:{round:0,taps:0},right:{round:0,taps:0},startAt:now()};side='left';$('connection').textContent='테스트';$('share').hidden=true;showGame();};
+$('share').onclick=()=>copyInvite('right');
+$('share-left').onclick=()=>copyInvite('left');
+$('demo').onclick=()=>{clearError();demo=true;demoStarted=false;cameraReady=false;finishAt=0;connected=true;roomId=null;room={mode:'remote',initials:initials(),meetingMessage:$('meeting-message').value.trim().slice(0,40),round:0,left:{round:0,taps:0},right:{round:0,taps:0},startAt:now()};side='left';$('connection').textContent='테스트';$('share').hidden=true;$('share-left').hidden=true;showGame();};
 setInterval(()=>{if(demo&&demoStarted&&canTap({...room,startAt:room.startAt+3000},now())){const position=state(room.left.taps,room.right.taps);if(!position.done||position.meeting>MIN_MEETING)room.right.taps++;}},280);
 async function tap(){
-  if(!room||!connected||busy||now()-lastInput<65||!canTap({...room,startAt:room.startAt?room.startAt+3000:null},now()))return;
+  if(!room||!connected||(!demo&&!controlsSeat)||busy||now()-lastInput<65||!canTap({...room,startAt:room.startAt?room.startAt+3000:null},now()))return;
   const position=state(room.left?.taps,room.right?.taps);
   if(position.done&&((side==='left'&&position.meeting>=MAX_MEETING)||(side==='right'&&position.meeting<=MIN_MEETING))){wallUntil=now()+1500;return;}
   lastInput=now();
@@ -251,14 +264,13 @@ let lastStatus='';function frame(t){
     const sinceStart=room.startAt?now()-room.startAt-3000:-Infinity;
     const counting=connected&&!!room.right&&!!room.startAt&&sinceStart<650;
     $('countdown').hidden=!counting;
-    const countText=seconds>0?String(seconds):'냠!';
+    const countText=seconds>0?`${seconds}!`:'출발!';
     if(counting&&countText!==lastCountdown){
       $('countdown-number').textContent=countText;
-      $('countdown-label').textContent=seconds>0?'먹을 준비 됐나요?':'같이 먹으러 출발!';
       $('countdown-number').animate([{transform:'scale(.65)',opacity:.3},{transform:'scale(1.12)',opacity:1,offset:.65},{transform:'scale(1)',opacity:1}],{duration:420,easing:'ease-out'});
     }
     lastCountdown=counting?countText:'';
-    const text=!connected?'재연결 중':!room.right?'상대 대기 중':seconds>0?'':s.done?'':'탭하여 이동';if(text!==lastStatus){$('status').textContent=text;lastStatus=text;}}
+    const text=!demo&&!controlsSeat?'다른 브라우저에서 이어 하는 중':!connected?'재연결 중':!room.right?'상대 대기 중':seconds>0?'':s.done?'':'탭하여 이동';if(text!==lastStatus){$('status').textContent=text;lastStatus=text;}}
   requestAnimationFrame(frame);
 }requestAnimationFrame(frame);
 const id=location.hash.slice(1);if(id){if(/^[a-f0-9]{32}$/.test(id))enter(id);else error('올바른 초대 링크가 아니에요. 새 방을 만들어주세요.');}

@@ -43,8 +43,8 @@ test('starting bears sit directly inside the heart markers while preserving cont
   const start=roadLayout(state(),width,'together');
   assert.ok(Math.abs(start.leftX-48-start.leftMarker)<1e-8);
   assert.ok(Math.abs(start.rightX+48-start.rightMarker)<1e-8);
-  assert.equal(start.leftMarker,WIDTH-width+35);
-  assert.equal(start.rightMarker,WIDTH+width-35);
+  assert.equal(start.leftMarker,WIDTH-width+53);
+  assert.equal(start.rightMarker,WIDTH+width-53);
   for(const [l,r] of [[12,12],[24,0],[0,24],[40,30]]){
    const joined=roadLayout(state(l,r),width,'together');
    assert.ok(Math.abs(joined.rightX-joined.leftX-96)<1e-8);

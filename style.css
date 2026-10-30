@@ -18,7 +18,7 @@ body.playing{overflow:hidden;background:#fff6f2}
 .playing #game>details{display:none}
 .playing #error:not([hidden]){position:fixed;bottom:20px;left:12px;right:12px;z-index:5;margin:0;border-radius:12px}
 
-.playing #share:not([hidden]){display:inline-block;background:#fff9;border:1px solid #ddc8bf80;border-radius:20px;color:#856e65;backdrop-filter:blur(8px)}
+.playing #share:not([hidden]),.playing #share-left:not([hidden]){display:inline-block;background:#fff9;border:1px solid #ddc8bf80;border-radius:20px;color:#856e65;backdrop-filter:blur(8px)}
 
 .meeting-label{display:block;text-align:left;font-size:13px;color:#666;margin-top:22px;margin-bottom:7px}
 #meeting-message{display:block;width:100%;padding:12px;border:1px solid #ddd;border-radius:6px;background:white;font:inherit;font-size:14px;color:#58433e}
@@ -26,8 +26,6 @@ body.playing{overflow:hidden;background:#fff6f2}
 .initials input,#meeting-message{font-size:16px}
 .playing #game{height:100%;height:100dvh}
 
-#countdown{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);z-index:3;display:flex;align-items:center;flex-direction:column;justify-content:center;width:210px;height:210px;border:3px solid #fff9;border-radius:50%;background:radial-gradient(circle at 35% 25%,#fffdf8,#ffe1e9);box-shadow:0 10px 40px #bc758426,0 0 0 8px #fff6;pointer-events:none;color:#b96b81;text-align:center}
-#countdown-label{font-size:15px;font-weight:650;letter-spacing:.03em}
-#countdown-number{display:block;font-size:80px;line-height:1.25;color:#ca7590;text-shadow:0 3px 0 #fff;font-weight:850}
-.countdown-hearts{font-size:19px;letter-spacing:8px;color:#dc93a5}
-@media(max-height:500px){#countdown{width:160px;height:160px;top:42%}#countdown-number{font-size:56px}}
+#countdown{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);z-index:3;pointer-events:none;text-align:center;white-space:nowrap}
+#countdown-number{display:block;font-size:76px;line-height:1.2;color:#946956;text-shadow:0 3px 0 #fff8;font-weight:850}
+@media(max-height:500px){#countdown{top:38%}#countdown-number{font-size:54px}}

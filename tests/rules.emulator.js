@@ -52,6 +52,15 @@ test('RTDB permissions, seat ownership, countdown, rate and shared finish',async
  if(resets.filter(x=>x.committed).length!==1)throw new Error('Concurrent resets should restart once');
  const raceFinal=(await get(ref(a,path))).val();if(raceFinal.round!==2||raceFinal.left.taps!==0||raceFinal.right.taps!==0)throw new Error('Reset race corrupted room');
 
+ // A seat-link takeover changes only ownership; progress and round stay intact.
+ const resumePath='rooms/'+'c'.repeat(32),leftKey='d'.repeat(32),rightKey='e'.repeat(32);
+ const resumable={...raceFinal,seatKeys:{left:leftKey,right:rightKey},left:{...raceFinal.left,accessKey:leftKey},right:{...raceFinal.right,accessKey:rightKey,taps:7,lastTap:12345}};
+ await env.withSecurityRulesDisabled(async ctx=>{await set(ref(ctx.database(),resumePath),resumable);});
+ await assertFails(set(ref(c,resumePath+'/right'),{...resumable.right,uid:'charlie',accessKey:'f'.repeat(32)}));
+ await assertFails(set(ref(c,resumePath+'/right'),{...resumable.right,uid:'charlie',taps:0}));
+ await assertSucceeds(set(ref(c,resumePath+'/right'),{...resumable.right,uid:'charlie'}));
+ const resumedRoom=(await get(ref(c,resumePath))).val();
+ if(resumedRoom.right.taps!==7||resumedRoom.right.lastTap!==12345||resumedRoom.round!==raceFinal.round)throw new Error('Seat takeover reset progress');
  }finally{for(const stop of stops)stop();await env.cleanup();}
 });
 
