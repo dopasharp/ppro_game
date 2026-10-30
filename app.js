@@ -34,7 +34,8 @@ function createRoom(mode){
 
 const now=()=>Date.now()+offset;
 function error(e){$('error').hidden=false;if(e?.code==='auth/network-request-failed'){$('error').textContent='Firebase 로그인 서버에 연결하지 못했어요. 게임 위치는 초기화되지 않았습니다. 네트워크 연결과 이 사이트의 콘텐츠 차단 설정을 확인한 뒤 같은 자리 링크를 다시 열어주세요. (auth/network-request-failed)';return;}const permissionDenied=/permission.?denied/i.test(`${e?.code||''} ${e?.message||e}`);$('error').textContent=permissionDenied?'Firebase에서 방 저장을 거부했어요. Firebase Console → Realtime Database → 규칙에 프로젝트의 database.rules.json 전체를 붙여넣고 게시한 뒤 새 방을 만들어주세요.':typeof e==='string'?e:`연결을 확인해주세요: ${e.code||e.message}`;}
-function setConnecting(value){
+function setConnecting(value,name=room?.initials?.[side]){
+  $('connecting-title').textContent=name?`${name}님 잠시만 기다려주세요!`:'잠시만 기다려주세요!';
   $('connecting-overlay').hidden=!value;
   document.body.classList.toggle('connecting',value);
   document.querySelector('main').inert=value;
@@ -73,14 +74,17 @@ async function firebase(session='[DEFAULT]'){
 }
 function roomRef(path=''){return api.ref(db,`rooms/${roomId}${path?'/'+path:''}`);}
 async function enter(id,create=false,mode='remote',copying=null){
-  clearError();setConnecting(true);for(const id of ['create-together','create-remote'])$(id).disabled=true;
+  clearError();for(const id of ['create-together','create-remote'])$(id).disabled=true;
   const generation=++enterGeneration;roomLoaded=false;seenOpponent=false;room=null;controlsSeat=false;
   const selectedSeat=create?'left':requestedSeat(location.href);
+  setConnecting(true,create?$('my-initial').value.trim():'');
   try{roomId=id;side=selectedSeat||'right';await spritesReady;if(spriteLoadError)throw spriteLoadError;await firebase(authSession(id,selectedSeat));if(generation!==enterGeneration)return;demo=false;cameraReady=false;finishAt=0;
     if(create){await api.set(roomRef(),{mode,seatKeys,initials:initials(),meetingMessage:$('meeting-message').value.trim().slice(0,40),round:0,createdAt:api.serverTimestamp(),left:{uid,accessKey:seatKeys.left,round:0,taps:0,lastTap:0}});}
     else{const snapshot=await api.get(roomRef());const r=snapshot.val();if(!r)throw new Error('방이 없어요. 새 방을 만들어주세요.');
       const accessKey=new URL(location.href).searchParams.get('seatKey');
       const action=seatAction(r,uid,selectedSeat,accessKey);seatKeys=r.seatKeys||null;
+      const displaySeat=selectedSeat||(r.left.uid===uid?'left':'right');
+      setConnecting(true,r.initials?.[displaySeat]);
       if(action==='invalid')throw new Error('자리 링크가 올바르지 않아요. 하단에서 복사한 전체 링크를 열어주세요.');
       if(action==='resume'){const resumed=await api.runTransaction(roomRef(selectedSeat),p=>resumeSeat(p,uid,accessKey,r[selectedSeat])??undefined,{applyLocally:false});if(!resumed.committed)throw new Error('자리 연결을 다시 시도해주세요.');side=selectedSeat;}
       if(action==='occupied')throw new Error(`${selectedSeat==='left'?'왼쪽':selectedSeat==='right'?'오른쪽':'선택한'} 자리가 이미 사용 중이에요. 처음 입장했던 브라우저에서 해당 자리 링크를 다시 열어주세요. 다른 브라우저로 바꿨다면 새 방을 만들어주세요.`);
