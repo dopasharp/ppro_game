@@ -10,4 +10,7 @@ export function seatAction(room,uid,seat,key=null){
   if(room[seat]&&key&&key===room.seatKeys?.[seat])return 'resume';
   return seat==='right'&&!room.right?'claim':'occupied';
 }
-export function resumeSeat(player,uid,key){return player&&key&&player.accessKey===key?{...player,uid}:null;}
+export function resumeSeat(player,uid,key,fallback=null){
+  const current=player??fallback;
+  return current&&key&&current.accessKey===key?{...current,uid}:null;
+}

@@ -1,7 +1,8 @@
-import {roomLink,requestedSeat,authSession,seatAction,resumeSeat} from './room-links.js?v=34';
+import {signInWithRetry} from './firebase-session.js?v=35';
+import {roomLink,requestedSeat,authSession,seatAction,resumeSeat} from './room-links.js?v=37';
 import {writeLink} from './clipboard.js?v=23';
 import {firebaseConfig,emulatorPorts} from './firebase-config.js';
-import {WIDTH,HEIGHT,TOTAL,state,canTap,advanceCamera,resetRound,bitePose,MIN_MEETING,MAX_MEETING,viewportLayout,roadLayout} from './game.js?v=32';
+import {WIDTH,HEIGHT,TOTAL,state,canTap,advanceCamera,resetRound,bitePose,MIN_MEETING,MAX_MEETING,viewportLayout,roadLayout,countdownText} from './game.js?v=39';
 const $=id=>document.getElementById(id), canvas=$('canvas'),ctx=canvas.getContext('2d'),overview=$('overview').getContext('2d');
 let demoStarted=false,cameraX=0,cameraReady=false,lastFrame=0,finishAt=0,observedRound=null,resetBusy=false;
 let room=null,side='left',uid,db,api,connected=false,offset=0,busy=false,unsub=null,roomId=null,demo=false,lastInput=0,startBusy=false;
@@ -25,7 +26,7 @@ function createRoom(mode){
 }
 
 const now=()=>Date.now()+offset;
-function error(e){$('error').hidden=false;const permissionDenied=/permission.?denied/i.test(`${e?.code||''} ${e?.message||e}`);$('error').textContent=permissionDenied?'Firebase에서 방 저장을 거부했어요. Firebase Console → Realtime Database → 규칙에 프로젝트의 database.rules.json 전체를 붙여넣고 게시한 뒤 새 방을 만들어주세요.':typeof e==='string'?e:`연결을 확인해주세요: ${e.code||e.message}`;}
+function error(e){$('error').hidden=false;if(e?.code==='auth/network-request-failed'){$('error').textContent='Firebase 로그인 서버에 연결하지 못했어요. 게임 위치는 초기화되지 않았습니다. 네트워크 연결과 이 사이트의 콘텐츠 차단 설정을 확인한 뒤 같은 자리 링크를 다시 열어주세요. (auth/network-request-failed)';return;}const permissionDenied=/permission.?denied/i.test(`${e?.code||''} ${e?.message||e}`);$('error').textContent=permissionDenied?'Firebase에서 방 저장을 거부했어요. Firebase Console → Realtime Database → 규칙에 프로젝트의 database.rules.json 전체를 붙여넣고 게시한 뒤 새 방을 만들어주세요.':typeof e==='string'?e:`연결을 확인해주세요: ${e.code||e.message}`;}
 function clearError(){$('error').hidden=true;}
 function showGame(){ document.body.classList.add('playing');$('lobby').hidden=true;$('game').hidden=false;resize(); }
 function resize(){const bounds=$('stage').getBoundingClientRect(),w=bounds.width||window.innerWidth,h=bounds.height||window.innerHeight;const dpr=Math.min(devicePixelRatio||1,3);canvas.style.width='100%';canvas.style.height='100%';canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}
@@ -38,13 +39,13 @@ async function firebase(session='[DEFAULT]'){
   const [a,b,c]=await Promise.all([import('https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js'),import('https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js'),import('https://www.gstatic.com/firebasejs/12.0.0/firebase-database.js')]);
   const app=a.getApps().find(app=>app.name===session)||a.initializeApp(firebaseConfig,session),auth=b.getAuth(app);db=c.getDatabase(app);
   if(new URLSearchParams(location.search).has('emulator')&&['localhost','127.0.0.1'].includes(location.hostname)){b.connectAuthEmulator(auth,`http://127.0.0.1:${emulatorPorts.auth}`,{disableWarnings:true});c.connectDatabaseEmulator(db,'127.0.0.1',emulatorPorts.database);}
-  await b.setPersistence(auth,b.browserLocalPersistence);uid=(auth.currentUser||await b.signInAnonymously(auth).then(result=>result.user)).uid;api=c;activeAuthSession=session;
+  await b.setPersistence(auth,b.browserLocalPersistence);uid=(await signInWithRetry(auth,b.signInAnonymously)).uid;api=c;activeAuthSession=session;
   infoStops.push(c.onValue(c.ref(db,'.info/serverTimeOffset'),s=>offset=s.val()||0));
   infoStops.push(c.onValue(c.ref(db,'.info/connected'),s=>{connected=!!s.val();$('connection').textContent=connected?'연결됨':'재연결 중';}));
 }
 function roomRef(path=''){return api.ref(db,`rooms/${roomId}${path?'/'+path:''}`);}
 async function enter(id,create=false,mode='remote',copying=null){
-  clearError();for(const id of ['create-together','create-remote','demo'])$(id).disabled=true;
+  clearError();for(const id of ['create-together','create-remote'])$(id).disabled=true;
   const selectedSeat=create?'left':requestedSeat(location.href);
   try{roomId=id;side=selectedSeat||'right';await firebase(authSession(id,selectedSeat));demo=false;cameraReady=false;finishAt=0;
     if(create){await api.set(roomRef(),{mode,seatKeys,initials:initials(),meetingMessage:$('meeting-message').value.trim().slice(0,40),round:0,createdAt:api.serverTimestamp(),left:{uid,accessKey:seatKeys.left,round:0,taps:0,lastTap:0}});}
@@ -52,7 +53,7 @@ async function enter(id,create=false,mode='remote',copying=null){
       const accessKey=new URL(location.href).searchParams.get('seatKey');
       const action=seatAction(r,uid,selectedSeat,accessKey);seatKeys=r.seatKeys||null;
       if(action==='invalid')throw new Error('자리 링크가 올바르지 않아요. 상단에서 복사한 전체 링크를 열어주세요.');
-      if(action==='resume'){const resumed=await api.runTransaction(roomRef(selectedSeat),p=>resumeSeat(p,uid,accessKey)??undefined,{applyLocally:false});if(!resumed.committed)throw new Error('자리 연결을 다시 시도해주세요.');side=selectedSeat;}
+      if(action==='resume'){const resumed=await api.runTransaction(roomRef(selectedSeat),p=>resumeSeat(p,uid,accessKey,r[selectedSeat])??undefined,{applyLocally:false});if(!resumed.committed)throw new Error('자리 연결을 다시 시도해주세요.');side=selectedSeat;}
       if(action==='occupied')throw new Error(`${selectedSeat==='left'?'왼쪽':selectedSeat==='right'?'오른쪽':'선택한'} 자리가 이미 사용 중이에요. 처음 입장했던 브라우저에서 해당 자리 링크를 다시 열어주세요. 다른 브라우저로 바꿨다면 새 방을 만들어주세요.`);
       if(action==='claim'){const claim=await api.runTransaction(roomRef('right'),v=>v?undefined:{uid,...(seatKeys?{accessKey:seatKeys.right}:{}),round:r.round??0,taps:0,lastTap:0},{applyLocally:false});if(!claim.committed)throw new Error('오른쪽 자리에 다른 사람이 먼저 들어왔어요. 새 방을 만들어주세요.');side='right';}else if(action!=='resume')side=action;
     }
@@ -62,7 +63,7 @@ async function enter(id,create=false,mode='remote',copying=null){
     if(unsub)unsub();unsub=api.onValue(roomRef(),snapshot=>{room=snapshot.val();if(!room){error('방이 삭제되었어요. 새 게임을 시작해주세요.');return;}const assignedSide=selectedSeat||(room.left.uid===uid?'left':'right');if(assignedSide!==side)cameraReady=false;side=assignedSide;controlsSeat=room[side]?.uid===uid;
       if(controlsSeat&&room.right&&!room.startAt&&!startBusy){startBusy=true;api.runTransaction(roomRef('startAt'),v=>v??api.serverTimestamp(),{applyLocally:false}).catch(error).finally(()=>startBusy=false);}
     },error);
-  }catch(e){error(e);}finally{for(const id of ['create-together','create-remote','demo'])$(id).disabled=false;}
+  }catch(e){error(e);}finally{for(const id of ['create-together','create-remote'])$(id).disabled=false;}
 }
 function newRoom(){const bytes=crypto.getRandomValues(new Uint8Array(16));return [...bytes].map(x=>x.toString(16).padStart(2,'0')).join('');}
 $('create-together').onclick=()=>createRoom('together');
@@ -78,7 +79,7 @@ $('new').onclick=async()=>{
 };
 $('share').onclick=()=>copyInvite('right');
 $('share-left').onclick=()=>copyInvite('left');
-$('demo').onclick=()=>{clearError();demo=true;demoStarted=false;cameraReady=false;finishAt=0;connected=true;roomId=null;room={mode:'remote',initials:initials(),meetingMessage:$('meeting-message').value.trim().slice(0,40),round:0,left:{round:0,taps:0},right:{round:0,taps:0},startAt:now()};side='left';$('connection').textContent='테스트';$('share').hidden=true;$('share-left').hidden=true;showGame();};
+
 setInterval(()=>{if(demo&&demoStarted&&canTap({...room,startAt:room.startAt+3000},now())){const position=state(room.left.taps,room.right.taps);if(!position.done||position.meeting>MIN_MEETING)room.right.taps++;}},280);
 async function tap(){
   if(!room||!connected||(!demo&&!controlsSeat)||busy||now()-lastInput<65||!canTap({...room,startAt:room.startAt?room.startAt+3000:null},now()))return;
@@ -109,8 +110,8 @@ function pepero(c,s,left,right){
   const start=s.leftX+48,end=start+gap;
   c.save();c.beginPath();c.rect(start,477-height/2,gap,height);c.clip();
   // Keep one biscuit handle at the host's end; only chocolate repeats beyond it.
-  c.drawImage(img,sx,sy,cookieSourceWidth,sh,start,477-height/2,cookieWidth,height);
-  const chocolateOrigin=start+cookieWidth;
+  c.drawImage(img,sx,sy,cookieSourceWidth,sh,origin,477-height/2,cookieWidth,height);
+  const chocolateOrigin=origin+cookieWidth;
   // A continuous chocolate core closes tiny transparent seams between repeats.
   const cocoa=c.createLinearGradient(0,472,0,482);
   cocoa.addColorStop(0,'#9e5134');cocoa.addColorStop(.4,'#6e2d1c');cocoa.addColorStop(1,'#4a2017');
@@ -261,10 +262,9 @@ let lastStatus='';function frame(t){
   ctx.setTransform(scale,0,0,scale,0,offsetY);world(ctx,view,sceneWidth,t);if($('overview').parentElement.open)world(overview,0,780,t);
   if(room){const s=state(room.left?.taps,room.right?.taps);$('score').textContent=`${room.left?.taps||0} : ${room.right?.taps||0}`;
     const seconds=room.startAt?Math.ceil((room.startAt+3000-now())/1000):0;
-    const sinceStart=room.startAt?now()-room.startAt-3000:-Infinity;
-    const counting=connected&&!!room.right&&!!room.startAt&&sinceStart<650;
+    const countText=room.startAt?countdownText(now()-room.startAt):'';
+    const counting=connected&&!!room.right&&!!countText;
     $('countdown').hidden=!counting;
-    const countText=seconds>0?`${seconds}!`:'출발!';
     if(counting&&countText!==lastCountdown){
       $('countdown-number').textContent=countText;
       $('countdown-number').animate([{transform:'scale(.65)',opacity:.3},{transform:'scale(1.12)',opacity:1,offset:.65},{transform:'scale(1)',opacity:1}],{duration:420,easing:'ease-out'});

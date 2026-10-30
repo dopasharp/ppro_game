@@ -1,4 +1,8 @@
 export const WIDTH=390, HEIGHT=844, TOTAL=24;
+export function countdownText(elapsed){
+  if(elapsed<0||elapsed>=3000)return '';
+  return `${3-Math.floor(elapsed/1000)}!`;
+}
 // Use one scale on both axes. Together screens meet at the same world seam.
 export function viewportLayout(width,height,side,mode,cameraX,scene=null){
   const scale=Math.min(width/WIDTH,height/HEIGHT);

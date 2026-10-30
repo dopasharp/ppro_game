@@ -26,6 +26,13 @@ test('same browser seats have distinct stable login sessions',()=>{
  assert.equal(authSession('abc','left'),authSession('abc','left'));
  assert.equal(authSession('abc',null),'[DEFAULT]');
 });
+test('resume starts from the fetched seat when the local transaction cache is empty',()=>{
+ const fetched={uid:'old-browser',accessKey:'secret',round:2,taps:9,lastTap:100};
+ assert.deepEqual(resumeSeat(null,'new-browser','secret',fetched),{...fetched,uid:'new-browser'});
+ const latest={...fetched,taps:10,lastTap:200};
+ assert.deepEqual(resumeSeat(latest,'new-browser','secret',fetched),{...latest,uid:'new-browser'});
+ assert.equal(resumeSeat({...latest,accessKey:'changed'},'new-browser','secret',fetched),null);
+});
 test('explicit seats reconnect their owner and never silently take another seat',()=>{
  const room={left:{uid:'host'},right:{uid:'guest'}};
  assert.equal(seatAction(room,'host','left'),'left');
