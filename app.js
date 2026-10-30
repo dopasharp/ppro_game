@@ -1,7 +1,6 @@
 import {firebaseConfig,emulatorPorts} from './firebase-config.js';
-import {WIDTH,HEIGHT,TOTAL,state,canTap,advanceCamera,resetRound,bitePose,MIN_MEETING,MAX_MEETING} from './game.js?v=10';
+import {WIDTH,HEIGHT,TOTAL,state,canTap,advanceCamera,resetRound,bitePose,MIN_MEETING,MAX_MEETING,viewportLayout} from './game.js?v=16';
 const $=id=>document.getElementById(id), canvas=$('canvas'),ctx=canvas.getContext('2d'),overview=$('overview').getContext('2d');
-let viewportWidth=WIDTH;
 let demoStarted=false,cameraX=0,cameraReady=false,lastFrame=0,finishAt=0,observedRound=null,resetBusy=false;
 let room=null,side='left',uid,db,api,connected=false,offset=0,busy=false,unsub=null,roomId=null,demo=false,lastInput=0,startBusy=false;
 const spriteMeta=await fetch(new URL('./assets/sprites.json',import.meta.url)).then(r=>{if(!r.ok)throw new Error('스프라이트 정보를 불러올 수 없습니다.');return r.json();});
@@ -21,7 +20,7 @@ const now=()=>Date.now()+offset;
 function error(e){$('error').hidden=false;const permissionDenied=/permission.?denied/i.test(`${e?.code||''} ${e?.message||e}`);$('error').textContent=permissionDenied?'Firebase에서 방 저장을 거부했어요. Firebase Console → Realtime Database → 규칙에 프로젝트의 database.rules.json 전체를 붙여넣고 게시한 뒤 새 방을 만들어주세요.':typeof e==='string'?e:`연결을 확인해주세요: ${e.code||e.message}`;}
 function clearError(){$('error').hidden=true;}
 function showGame(){ document.body.classList.add('playing');$('lobby').hidden=true;$('game').hidden=false;$('invite').value=location.href;resize(); }
-function resize(){const w=window.innerWidth,h=window.innerHeight;const dpr=Math.min(devicePixelRatio||1,3);viewportWidth=w/h*HEIGHT;canvas.style.width='100%';canvas.style.height='100%';canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}
+function resize(){const w=window.innerWidth,h=window.innerHeight;const dpr=Math.min(devicePixelRatio||1,3);canvas.style.width='100%';canvas.style.height='100%';canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}
 addEventListener('resize',resize);$('scale').oninput=resize;
 async function firebase(){
   if(api)return;
@@ -205,7 +204,7 @@ function world(c,view,width,t){
     c.restore();
   }
 
-  c.fillStyle='#b28f79';c.font='12px sans-serif';c.fillText(waiting?'상대 대기 중':s.done?'붙어서 함께 이동해요! 계속 탭해주세요 ♥':'탭하여 이동',view+width/2,650);
+  c.fillStyle='#b28f79';c.font='12px sans-serif';c.fillText(waiting?'상대 대기 중':s.done?'':'탭하여 이동',view+width/2,650);
   c.fillStyle='#e1d0bb';c.fillRect(view+50,690,width-100,3);c.fillStyle='#c68585';c.fillRect(view+50,690,(width-100)*s.progress,3);
   c.restore();
 }
@@ -217,12 +216,12 @@ let lastStatus='';function frame(t){
   wallEdge=nextWall;
   if(!cameraReady){cameraX=side==='left'?0:WIDTH;cameraReady=true;}
   cameraX=advanceCamera(cameraX,scene,side,room?.mode,t-lastFrame);lastFrame=t;
-  if(!scene.done)finishAt=0;else if(!finishAt)finishAt=t;
-  const together=room?.mode==='together',sceneWidth=together?WIDTH:viewportWidth;
-  ctx.setTransform(canvas.width/sceneWidth,0,0,canvas.height/HEIGHT,0,0);world(ctx,together?cameraX:cameraX-(viewportWidth-WIDTH)/2,sceneWidth,t);if($('overview').parentElement.open)world(overview,0,780,t);
+  if(!scene.done)finishAt=0;else if(!finishAt){finishAt=t;notify('붙어서 함께 이동해요! 계속 탭해주세요 ♥');}
+  const {sceneWidth,view}=viewportLayout(canvas.width,canvas.height,side,room?.mode,cameraX);
+  const scale=canvas.height/HEIGHT;ctx.setTransform(scale,0,0,scale,0,0);world(ctx,view,sceneWidth,t);if($('overview').parentElement.open)world(overview,0,780,t);
   if(room){const s=state(room.left?.taps,room.right?.taps);$('score').textContent=`${room.left?.taps||0} : ${room.right?.taps||0}`;
     const seconds=room.startAt?Math.ceil((room.startAt+3000-now())/1000):0;
-    const text=!connected?'재연결 중':!room.right?'상대 대기 중':seconds>0?`${seconds} · 준비!`:s.done?'붙어서 함께 이동해요! 계속 탭해주세요 ♥':'탭하여 이동';if(text!==lastStatus){$('status').textContent=text;lastStatus=text;}}
+    const text=!connected?'재연결 중':!room.right?'상대 대기 중':seconds>0?`${seconds} · 준비!`:s.done?'':'탭하여 이동';if(text!==lastStatus){$('status').textContent=text;lastStatus=text;}}
   requestAnimationFrame(frame);
 }requestAnimationFrame(frame);
 const id=location.hash.slice(1);if(id){if(/^[a-f0-9]{32}$/.test(id))enter(id);else error('올바른 초대 링크가 아니에요. 새 방을 만들어주세요.');}

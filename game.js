@@ -1,4 +1,10 @@
 export const WIDTH=390, HEIGHT=844, TOTAL=24;
+// Use one scale on both axes. Together screens meet at the same world seam.
+export function viewportLayout(width,height,side,mode,cameraX){
+  const sceneWidth=width/height*HEIGHT;
+  const view=mode==='together'?(side==='left'?WIDTH-sceneWidth:WIDTH):cameraX-(sceneWidth-WIDTH)/2;
+  return {sceneWidth,view};
+}
 // Each bite opens and closes the mouth twice, then returns to rest.
 export function bitePose(elapsed){
   const chewing=elapsed>=0&&elapsed<480;
