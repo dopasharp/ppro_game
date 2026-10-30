@@ -17,10 +17,10 @@ test('joined bears stay together through continued and opposing taps',()=>{
 });
 
 test('joined bears stop within both lamps and can move back immediately',()=>{
- const right=state(30,0),left=state(0,30);
+ const right=state(24,0),left=state(0,24);
  assert.equal(right.meeting,MAX_MEETING);assert.equal(left.meeting,MIN_MEETING);
  assert.equal(state(10000,0).meeting,MAX_MEETING);
  assert.equal(state(0,10000).meeting,MIN_MEETING);
- assert.ok(state(30,1).meeting<right.meeting);
- assert.ok(state(1,30).meeting>left.meeting);
+ assert.ok(state(24,1).meeting<right.meeting);
+ assert.ok(state(1,24).meeting>left.meeting);
 });

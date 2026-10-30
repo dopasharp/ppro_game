@@ -38,11 +38,11 @@ test('remote tablet roads start with the opponent offscreen and reveal both on a
  }
 });
 
-test('wide together screens center starting bears while preserving contact spacing',()=>{
- for(const width of [768,1125,1500]){
+test('starting bears sit directly inside the heart markers while preserving contact spacing',()=>{
+ for(const width of [390,768,1125,1500]){
   const start=roadLayout(state(),width,'together');
-  assert.ok(Math.abs(start.leftX-(WIDTH-width/2))<1e-8);
-  assert.ok(Math.abs(start.rightX-(WIDTH+width/2))<1e-8);
+  assert.ok(Math.abs(start.leftX-48-start.leftMarker)<1e-8);
+  assert.ok(Math.abs(start.rightX+48-start.rightMarker)<1e-8);
   assert.equal(start.leftMarker,WIDTH-width+35);
   assert.equal(start.rightMarker,WIDTH+width-35);
   for(const [l,r] of [[12,12],[24,0],[0,24],[40,30]]){

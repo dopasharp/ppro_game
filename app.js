@@ -1,6 +1,6 @@
 import {writeLink} from './clipboard.js?v=23';
 import {firebaseConfig,emulatorPorts} from './firebase-config.js';
-import {WIDTH,HEIGHT,TOTAL,state,canTap,advanceCamera,resetRound,bitePose,MIN_MEETING,MAX_MEETING,viewportLayout,roadLayout} from './game.js?v=28';
+import {WIDTH,HEIGHT,TOTAL,state,canTap,advanceCamera,resetRound,bitePose,MIN_MEETING,MAX_MEETING,viewportLayout,roadLayout} from './game.js?v=29';
 const $=id=>document.getElementById(id), canvas=$('canvas'),ctx=canvas.getContext('2d'),overview=$('overview').getContext('2d');
 let demoStarted=false,cameraX=0,cameraReady=false,lastFrame=0,finishAt=0,observedRound=null,resetBusy=false;
 let room=null,side='left',uid,db,api,connected=false,offset=0,busy=false,unsub=null,roomId=null,demo=false,lastInput=0,startBusy=false;
@@ -91,16 +91,24 @@ function pepero(c,s,left,right){
   const gap=s.rightX-s.leftX-96;
   if(gap<=.01)return;
   // Tile at one uniform scale; longer tablet roads add length, never distortion.
-  const height=18,tileWidth=chocolateWidth/sh*height,cookieWidth=(chocolateX-sx)/sh*height;
+  const height=14,tileWidth=chocolateWidth/sh*height,cookieSourceWidth=sw*.10,cookieWidth=cookieSourceWidth/sh*height;
   const origin=roadLayout(state(),s.roadWidth,room?.mode).leftX+48;
   const start=s.leftX+48,end=start+gap;
   c.save();c.beginPath();c.rect(start,477-height/2,gap,height);c.clip();
   // Keep one biscuit handle at the host's end; only chocolate repeats beyond it.
-  c.drawImage(img,sx,sy,chocolateX-sx,sh,origin,477-height/2,cookieWidth,height);
-  const chocolateOrigin=origin+cookieWidth;
-  for(let x=chocolateOrigin+Math.max(0,Math.floor((start-chocolateOrigin)/tileWidth))*tileWidth;x<end;x+=tileWidth){
+  c.drawImage(img,sx,sy,cookieSourceWidth,sh,start,477-height/2,cookieWidth,height);
+  const chocolateOrigin=start+cookieWidth;
+  // A continuous chocolate core closes tiny transparent seams between repeats.
+  const cocoa=c.createLinearGradient(0,472,0,482);
+  cocoa.addColorStop(0,'#9e5134');cocoa.addColorStop(.4,'#6e2d1c');cocoa.addColorStop(1,'#4a2017');
+  c.fillStyle=cocoa;c.fillRect(Math.max(start,chocolateOrigin-1),473,Math.max(0,end-Math.max(start,chocolateOrigin-1)),9);
+  const stride=tileWidth-1;
+  for(let x=chocolateOrigin+Math.max(0,Math.floor((start-chocolateOrigin)/stride))*stride;x<end;x+=stride){
     c.drawImage(img,chocolateX,sy,chocolateWidth,sh,x,477-height/2,tileWidth,height);
   }
+  // Finish with the original rounded chocolate tip at the guest's mouth.
+  const tipSourceWidth=sw*.065,tipWidth=tipSourceWidth/sh*height;
+  if(gap>cookieWidth+tipWidth)c.drawImage(img,sx+sw-tipSourceWidth,sy,tipSourceWidth,sh,end-tipWidth,477-height/2,tipWidth,height);
   c.restore();
 }
 function scenery(c,view,width,t){
@@ -197,7 +205,8 @@ function world(c,view,width,t){
       c.fillText(i%2?'♥':'✧',s.meeting+Math.sin(i*2.4+elapsed/1700)*70,435-phase*125);
     }
     c.globalAlpha=1;c.fillStyle='#bb507d';c.font='bold 17px system-ui';
-    const message=elapsed<3000?(room?.meetingMessage??'우리 만났어요! ♥'):'';
+    const savedMessage=room?.meetingMessage;
+    const message=elapsed<3000?(savedMessage==null||savedMessage==='우리 만났어요! ♥'?'다 먹었다! ♥':savedMessage):'';
     const lines=[];let line='';
     for(const character of message){
       if(line&&c.measureText(line+character).width>240){lines.push(line);line='';}
@@ -224,6 +233,7 @@ function world(c,view,width,t){
   c.fillStyle='#e1d0bb';c.fillRect(view+50,690,width-100,3);c.fillStyle='#c68585';c.fillRect(view+50,690,(width-100)*s.progress,3);
   c.restore();
 }
+let lastCountdown='';
 let lastStatus='';function frame(t){
   if(room&&observedRound!==(room.round??0)){observedRound=room.round??0;resetPresentation();}
   const scene=state(room?.left?.taps,room?.right?.taps);
@@ -238,7 +248,17 @@ let lastStatus='';function frame(t){
   ctx.setTransform(scale,0,0,scale,0,offsetY);world(ctx,view,sceneWidth,t);if($('overview').parentElement.open)world(overview,0,780,t);
   if(room){const s=state(room.left?.taps,room.right?.taps);$('score').textContent=`${room.left?.taps||0} : ${room.right?.taps||0}`;
     const seconds=room.startAt?Math.ceil((room.startAt+3000-now())/1000):0;
-    const text=!connected?'재연결 중':!room.right?'상대 대기 중':seconds>0?`${seconds} · 준비!`:s.done?'':'탭하여 이동';if(text!==lastStatus){$('status').textContent=text;lastStatus=text;}}
+    const sinceStart=room.startAt?now()-room.startAt-3000:-Infinity;
+    const counting=connected&&!!room.right&&!!room.startAt&&sinceStart<650;
+    $('countdown').hidden=!counting;
+    const countText=seconds>0?String(seconds):'냠!';
+    if(counting&&countText!==lastCountdown){
+      $('countdown-number').textContent=countText;
+      $('countdown-label').textContent=seconds>0?'먹을 준비 됐나요?':'같이 먹으러 출발!';
+      $('countdown-number').animate([{transform:'scale(.65)',opacity:.3},{transform:'scale(1.12)',opacity:1,offset:.65},{transform:'scale(1)',opacity:1}],{duration:420,easing:'ease-out'});
+    }
+    lastCountdown=counting?countText:'';
+    const text=!connected?'재연결 중':!room.right?'상대 대기 중':seconds>0?'':s.done?'':'탭하여 이동';if(text!==lastStatus){$('status').textContent=text;lastStatus=text;}}
   requestAnimationFrame(frame);
 }requestAnimationFrame(frame);
 const id=location.hash.slice(1);if(id){if(/^[a-f0-9]{32}$/.test(id))enter(id);else error('올바른 초대 링크가 아니에요. 새 방을 만들어주세요.');}

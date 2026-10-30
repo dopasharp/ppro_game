@@ -15,19 +15,14 @@ export function bitePose(elapsed){
   return {frame:chewing?Math.floor(elapsed/120)%4:0,row:chewing&&Math.floor(elapsed/120)%2===0?1:0};
 }
 export const LEFT_START=104, RIGHT_START=676, KISS_GAP=96;
-export const MIN_MEETING=100, MAX_MEETING=680;
+export const MIN_MEETING=LEFT_START+KISS_GAP/2, MAX_MEETING=RIGHT_START-KISS_GAP/2;
 export const STEP=(RIGHT_START-LEFT_START-KISS_GAP)/TOTAL;
-function roadStretch(width){return Math.max(1,(width/2-KISS_GAP/2)/(WIDTH-LEFT_START-KISS_GAP/2));}
+function roadStretch(width){return Math.max(1,(width-35-KISS_GAP)/(WIDTH-LEFT_START-KISS_GAP/2));}
 // Extend walking distances on wide screens without widening sprites.
 export function roadLayout(scene,width,mode){
   const stretch=roadStretch(width);
   const leftMarker=WIDTH-width+35,rightMarker=WIDTH+width-35;
-  const initialMin=LEFT_START+KISS_GAP/2,initialMax=RIGHT_START-KISS_GAP/2;
-  const center=x=>{
-    if(x<initialMin){const atStart=WIDTH+(initialMin-WIDTH)*stretch;return atStart+(leftMarker+KISS_GAP-atStart)*(initialMin-x)/(initialMin-MIN_MEETING);}
-    if(x>initialMax){const atStart=WIDTH+(initialMax-WIDTH)*stretch;return atStart+(rightMarker-KISS_GAP-atStart)*(x-initialMax)/(MAX_MEETING-initialMax);}
-    return WIDTH+(x-WIDTH)*stretch;
-  };
+  const center=x=>WIDTH+(x-WIDTH)*stretch;
   const left=x=>WIDTH+(x-WIDTH)*stretch+(stretch-1)*KISS_GAP/2;
   const right=x=>WIDTH+(x-WIDTH)*stretch-(stretch-1)*KISS_GAP/2;
   const meeting=center(scene.meeting);
