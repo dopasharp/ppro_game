@@ -87,10 +87,17 @@ function pepero(c,s,left,right){
   const img=images.pepero;if(!img.complete||!img.naturalWidth)return;
   const flavor=roomId?parseInt(roomId.slice(0,8),16)%5:0;
   const [sx,sy,sw,sh]=spriteMeta.pepero[flavor];
-  const remaining=Math.max(0,1-(left+right)/TOTAL),gap=s.rightX-s.leftX-96;
+  const gap=s.rightX-s.leftX-96;
   if(gap<=.01)return;
-  // Crop both eaten ends; decorations retain their size as the stick shortens.
-  c.drawImage(img,sx+sw*left/TOTAL,sy,sw*remaining,sh,s.leftX+48,468,gap,18);
+  // Tile at one uniform scale; longer tablet roads add length, never distortion.
+  const height=18,tileWidth=sw/sh*height;
+  const origin=roadLayout(state(),s.roadWidth,room?.mode).leftX+48;
+  const start=s.leftX+48,end=start+gap;
+  c.save();c.beginPath();c.rect(start,477-height/2,gap,height);c.clip();
+  for(let x=origin+Math.floor((start-origin)/tileWidth)*tileWidth;x<end;x+=tileWidth){
+    c.drawImage(img,sx,sy,sw,sh,x,477-height/2,tileWidth,height);
+  }
+  c.restore();
 }
 function scenery(c,view,width,t){
   c.save();c.translate(view,0);

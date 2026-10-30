@@ -21,7 +21,8 @@ test('wide together screens center starting bears while preserving contact spaci
   const start=roadLayout(state(),width,'together');
   assert.ok(Math.abs(start.leftX-(WIDTH-width/2))<1e-8);
   assert.ok(Math.abs(start.rightX-(WIDTH+width/2))<1e-8);
-  assert.equal(start.leftX-start.leftMarker,69);
+  assert.equal(start.leftMarker,WIDTH-width+35);
+  assert.equal(start.rightMarker,WIDTH+width-35);
   for(const [l,r] of [[12,12],[24,0],[0,24],[40,30]]){
    const joined=roadLayout(state(l,r),width,'together');
    assert.ok(Math.abs(joined.rightX-joined.leftX-96)<1e-8);

@@ -21,7 +21,7 @@ export function roadLayout(scene,width,mode){
   const center=x=>WIDTH+(x-WIDTH)*stretch;
   const left=x=>center(x)+(stretch-1)*KISS_GAP/2;
   const right=x=>center(x)-(stretch-1)*KISS_GAP/2;
-  return {...scene,leftX:left(scene.leftX),rightX:right(scene.rightX),meeting:center(scene.meeting),leftMarker:left(LEFT_START)-69,rightMarker:right(RIGHT_START)+69};
+  return {...scene,leftX:left(scene.leftX),rightX:right(scene.rightX),meeting:center(scene.meeting),roadWidth:width,leftMarker:mode==='together'?WIDTH-width+35:35,rightMarker:mode==='together'?WIDTH+width-35:745};
 }
 export function state(left=0,right=0){
   const done=left+right>=TOTAL;
