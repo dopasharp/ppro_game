@@ -47,3 +47,12 @@ body.playing{overflow:hidden;background:#d9edf7}
 .seat-links{left:50%;right:auto;transform:translateX(-50%);bottom:calc(68px + env(safe-area-inset-bottom));width:min(340px,calc(100% - 28px));padding:12px;gap:8px;border:1px solid #d2e2e8;border-radius:16px;background:#fffffff5;box-shadow:0 8px 28px #5873821a;pointer-events:auto;z-index:4}
 .seat-card{flex:1;max-width:calc(50% - 4px)}
 .playing #notice{bottom:calc(118px + env(safe-area-inset-bottom))}
+
+body.connecting{overflow:hidden}
+.connecting #lobby{visibility:hidden}
+#connecting-overlay{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:14px;background:#eff8fc;color:#55798c;text-align:center;padding:24px}
+#connecting-overlay strong{font-size:21px;font-weight:750}
+#connecting-overlay p{margin:0;color:#7e9ca9;font-size:15px}
+.connection-spinner{width:34px;height:34px;border:3px solid #cfe4ec;border-top-color:#82afbf;border-radius:50%;margin-bottom:10px;animation:connecting-spin .9s linear infinite}
+@keyframes connecting-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.connection-spinner{animation:none}}
