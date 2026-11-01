@@ -207,14 +207,17 @@ function pepero(c,s,left,right){
   if(gap>cookieWidth+tipWidth)c.drawImage(img,sx+sw-tipSourceWidth,sy,tipSourceWidth,sh,end-tipWidth,477-height/2,tipWidth,height);
   c.restore();
 }
+const SKY_TOP='#f6d5dc',GROUND_BOTTOM='#f3e3cc';
 function scenery(c,view,width,t){
   c.save();c.translate(view,0);
+  // Side-by-side phones share one fixed world, so far layers stay pinned to it and meet at the seam; remote cameras keep the parallax.
+  const drift=rate=>room?.mode==='together'?view:view*rate;
   const sky=c.createLinearGradient(0,0,0,HEIGHT);
-  sky.addColorStop(0,'#cfe9f7');sky.addColorStop(.55,'#edf7fa');sky.addColorStop(.65,'#f7f5e9');sky.addColorStop(1,'#f6f0df');
+  sky.addColorStop(0,SKY_TOP);sky.addColorStop(.55,'#fbeeea');sky.addColorStop(.65,'#fbf3e8');sky.addColorStop(1,GROUND_BOTTOM);
   c.fillStyle=sky;c.fillRect(0,0,width,HEIGHT);
   // The distant decorations scroll slowly; the path stays anchored to the bears.
-  for(let n=Math.floor(view*.22/640)-1;n<=Math.ceil((view*.22+width)/640);n++){
-    const x=n*640-view*.22;
+  for(let n=Math.floor(drift(.22)/640)-1;n<=Math.ceil((drift(.22)+width)/640);n++){
+    const x=n*640-drift(.22);
     // Soft clouds stay above the action, with a slower parallax than the path.
     c.fillStyle='#ffffffc9';
     for(const [cx,cy,size] of [[x+145,154,1],[x+480,248,.7]]){
@@ -223,24 +226,24 @@ function scenery(c,view,width,t){
       circle(c,cx+10*size,cy-19*size,28*size,'#ffffffc9');
       circle(c,cx+38*size,cy-8*size,18*size,'#ffffffc9');
     }
-    c.fillStyle='#cee0c8';c.beginPath();c.ellipse(x+180,543,230,74,0,Math.PI,0);c.fill();
-    c.fillStyle='#e0eaca';c.beginPath();c.ellipse(x+470,543,210,53,0,Math.PI,0);c.fill();
+    c.fillStyle='#efcdcf';c.beginPath();c.ellipse(x+180,543,230,74,0,Math.PI,0);c.fill();
+    c.fillStyle='#f3dfd2';c.beginPath();c.ellipse(x+470,543,210,53,0,Math.PI,0);c.fill();
   }
-  c.fillStyle='#e5edcc';c.fillRect(0,537,width,9);
-  c.fillStyle='#f2e5cb';c.fillRect(0,546,width,65);
-  c.strokeStyle='#d6d9b7';c.lineWidth=1;c.beginPath();c.moveTo(0,546);c.lineTo(width,546);c.stroke();
+  c.fillStyle='#ecd3c6';c.fillRect(0,537,width,9);
+  c.fillStyle='#f6e8d6';c.fillRect(0,546,width,65);
+  c.strokeStyle='#e3c6b4';c.lineWidth=1;c.beginPath();c.moveTo(0,546);c.lineTo(width,546);c.stroke();
   c.strokeStyle='#fffdf4';c.lineWidth=2;c.setLineDash([5,15]);c.lineDashOffset=view%20;c.beginPath();c.moveTo(0,602);c.lineTo(width,602);c.stroke();c.setLineDash([]);c.lineDashOffset=0;
   for(let n=Math.floor(view/120)-1;n<=Math.ceil((view+width)/120);n++){
     const x=n*120-view;
-    circle(c,x+16,574,2,'#c6b28d70');circle(c,x+67,586,1.5,'#c6b28d60');
+    circle(c,x+16,574,2,'#c9a38c70');circle(c,x+67,586,1.5,'#c9a38c60');
     c.save();c.translate(x+30,542);c.strokeStyle='#a1b58c';c.lineWidth=1.5;
     c.beginPath();c.moveTo(0,0);c.quadraticCurveTo(4,-10,1,-18);c.stroke();
-    for(let petal=0;petal<5;petal++){const a=petal*Math.PI*2/5;circle(c,1+Math.cos(a)*4,-20+Math.sin(a)*4,3,n%3===0?'#e9bcc4':'#fffdf2');}
+    for(let petal=0;petal<5;petal++){const a=petal*Math.PI*2/5;circle(c,1+Math.cos(a)*4,-20+Math.sin(a)*4,3,n%3===0?'#f2a7b6':'#fffdf2');}
     circle(c,1,-20,2,'#f8e7ba');c.restore();
   }
-  for(let n=Math.floor(view*.4/180)-1;n<=Math.ceil((view*.4+width)/180);n++){
-    const x=n*180-view*.4;
-    c.globalAlpha=.15;c.fillStyle='#88adbd';c.font='12px serif';c.textAlign='center';
+  for(let n=Math.floor(drift(.4)/180)-1;n<=Math.ceil((drift(.4)+width)/180);n++){
+    const x=n*180-drift(.4);
+    c.globalAlpha=.12;c.fillStyle='#b9737f';c.font='12px serif';c.textAlign='center';
     c.fillText('♡',x+55,300+Math.sin(n*2+t/2600)*7);c.globalAlpha=1;
   }
   c.restore();
@@ -249,7 +252,7 @@ function world(c,view,width,t){
   const l=room?.left?.taps||0,r=room?.right?.taps||0,s=roadLayout(state(l,r),width,room?.mode);
   c.save();c.beginPath();c.rect(0,0,width,HEIGHT);c.clip();c.translate(-view,0);
   scenery(c,view,width,t);
-  if(room?.mode!=='remote'){c.strokeStyle='#c0a98a';c.lineWidth=1;c.setLineDash([3,8]);c.beginPath();c.moveTo(390,140);c.lineTo(390,710);c.stroke();c.setLineDash([]);}
+  if(room?.mode!=='remote'){c.strokeStyle='#d9b3ab';c.lineWidth=1;c.setLineDash([3,8]);c.beginPath();c.moveTo(390,140);c.lineTo(390,710);c.stroke();c.setLineDash([]);}
   c.textAlign='center';
   
   c.fillStyle='#c7bba077';c.beginPath();c.ellipse(s.leftX,548,49,10,0,0,Math.PI*2);c.ellipse(s.rightX,548,49,10,0,0,Math.PI*2);c.fill();
@@ -331,8 +334,8 @@ function world(c,view,width,t){
     c.restore();
   }
 
-  c.fillStyle='#6d8b96';c.font='12px sans-serif';c.fillText(currentStatus(),view+width/2,650);
-  c.fillStyle='#d9dfd3';c.fillRect(view+50,690,width-100,3);c.fillStyle='#88b2a9';c.fillRect(view+50,690,(width-100)*s.progress,3);
+  c.fillStyle='#9a6468';c.font='12px sans-serif';c.fillText(currentStatus(),view+width/2,650);
+  c.fillStyle='#ecd6cf';c.fillRect(view+50,690,width-100,3);c.fillStyle='#e0607e';c.fillRect(view+50,690,(width-100)*s.progress,3);
   c.restore();
 }
 let lastCountdown='';
@@ -346,7 +349,7 @@ let lastStatus='';function frame(t){
   cameraX=advanceCamera(cameraX,scene,side,room?.mode,t-lastFrame);lastFrame=t;
   if(!scene.done)finishAt=0;else if(!finishAt){finishAt=t;notify('붙어서 함께 이동해요! 계속 탭해주세요 ♥');if(!demo)window.DopaSharp?.track('game_complete',{mode:room?.mode});}
   const {sceneWidth,view,scale,offsetY}=viewportLayout(canvas.width,canvas.height,side,room?.mode,cameraX,scene);
-  ctx.setTransform(1,0,0,1,0,0);const backdrop=ctx.createLinearGradient(0,0,0,canvas.height);backdrop.addColorStop(0,'#cfe9f7');backdrop.addColorStop(.65,'#f7f5e9');backdrop.addColorStop(1,'#f6f0df');ctx.fillStyle=backdrop;ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=SKY_TOP;ctx.fillRect(0,0,canvas.width,Math.ceil(offsetY)+1);ctx.fillStyle=GROUND_BOTTOM;ctx.fillRect(0,Math.floor(offsetY+HEIGHT*scale)-1,canvas.width,canvas.height);
   ctx.setTransform(scale,0,0,scale,0,offsetY);world(ctx,view,sceneWidth,t);if($('overview').parentElement.open)world(overview,0,780,t);
   if(room){const s=state(room.left?.taps,room.right?.taps);$('score').textContent=`${room.left?.taps||0} : ${room.right?.taps||0}`;
     const seconds=room.startAt?Math.ceil((room.startAt+3000-now())/1000):0;

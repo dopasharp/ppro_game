@@ -4,21 +4,21 @@
 
 .mode-buttons{display:flex;gap:10px;margin:28px 0 10px}.mode-buttons button{flex:1;min-height:48px;background:#292929;border-color:#292929;color:white}.mode-buttons button:hover{background:#444}.toolbar:has(#share){justify-content:flex-end}
 
-body.playing{overflow:hidden;background:#d9edf7}
+body.playing{overflow:hidden;background:#f6d5dc}
 .playing main{max-width:none}
 .playing header{display:none}
 .playing #game{position:fixed;inset:0;width:100%;height:100dvh}
-.playing #stage{position:absolute;inset:0;width:100%;height:100%;background:#d9edf7}
+.playing #stage{position:absolute;inset:0;width:100%;height:100%;background:#f6d5dc}
 .playing #canvas{width:100%;height:100%;max-width:none}
 .playing #game>.toolbar{display:none}
 .playing #game>.toolbar:first-child{display:flex;position:absolute;top:env(safe-area-inset-top,0px);right:4px;z-index:2;padding:10px}
 .playing #share{display:none}
-.playing #new,.playing #create-new{background:#fff9;border:1px solid #b2cad880;border-radius:20px;color:#577585;backdrop-filter:blur(8px)}
-.playing #status{position:absolute;top:calc(env(safe-area-inset-top,0px) + 55px);left:16px;right:16px;z-index:2;pointer-events:none;font-size:12px;color:#6d8996}
+.playing #new,.playing #create-new{background:#fff9;border:1px solid #e2bdb680;border-radius:20px;color:#8f5258;backdrop-filter:blur(8px)}
+.playing #status{position:absolute;top:calc(env(safe-area-inset-top,0px) + 55px);left:16px;right:16px;z-index:2;pointer-events:none;font-size:12px;color:#9a6468}
 .playing #game>details{display:none}
 .playing #error:not([hidden]){position:fixed;bottom:20px;left:12px;right:12px;z-index:5;margin:0;border-radius:12px}
 
-.playing #share:not([hidden]),.playing #share-left:not([hidden]){display:inline-block;background:#fff9;border:1px solid #b2cad880;border-radius:20px;color:#577585;backdrop-filter:blur(8px)}
+.playing #share:not([hidden]),.playing #share-left:not([hidden]){display:inline-block;background:#fff9;border:1px solid #e2bdb680;border-radius:20px;color:#8f5258;backdrop-filter:blur(8px)}
 
 .meeting-label{display:block;text-align:left;font-size:13px;color:#666;margin-top:22px;margin-bottom:7px}
 #meeting-message{display:block;width:100%;padding:12px;border:1px solid #ddd;border-radius:6px;background:white;font:inherit;font-size:14px;color:#58433e}
@@ -43,8 +43,8 @@ body.playing{overflow:hidden;background:#d9edf7}
 .seat-card{padding:0;background:none;border:0;backdrop-filter:none}
 .seat-card button{white-space:normal;overflow-wrap:anywhere}
 
-#share-menu{position:absolute;bottom:calc(16px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:4;min-height:40px;padding:9px 18px;background:#ffffffc9;color:#577585;border:1px solid #b2cad880;border-radius:24px;font-size:12px;backdrop-filter:blur(8px)}
-.seat-links{left:50%;right:auto;transform:translateX(-50%);bottom:calc(68px + env(safe-area-inset-bottom));width:min(340px,calc(100% - 28px));padding:12px;gap:8px;border:1px solid #d2e2e8;border-radius:16px;background:#fffffff5;box-shadow:0 8px 28px #5873821a;pointer-events:auto;z-index:4}
+#share-menu{position:absolute;bottom:calc(16px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:4;min-height:40px;padding:9px 18px;background:#ffffffc9;color:#8f5258;border:1px solid #e2bdb680;border-radius:24px;font-size:12px;backdrop-filter:blur(8px)}
+.seat-links{left:50%;right:auto;transform:translateX(-50%);bottom:calc(68px + env(safe-area-inset-bottom));width:min(340px,calc(100% - 28px));padding:12px;gap:8px;border:1px solid #ecd3cb;border-radius:16px;background:#fffffff5;box-shadow:0 8px 28px #7a40401a;pointer-events:auto;z-index:4}
 .seat-card{flex:1;max-width:calc(50% - 4px)}
 .playing #notice{bottom:calc(118px + env(safe-area-inset-bottom))}
 
@@ -89,3 +89,22 @@ button:focus-visible{outline:3px solid currentColor;outline-offset:2px}
 .connection-spinner{border-color:var(--color-border);border-top-color:var(--color-brand)}
 body:not(.playing) header .dopa-label,body:not(.playing) header [data-dopa-more]{white-space:nowrap}
 body:not(.playing) header [data-dopa-more]{padding-inline:4px}
+
+
+/* Pepero frame: chocolate-dark lobby with one strawberry stick; pink only on the label, the name and the main action
+   (DOPA# guide: pink marks events and special content, and Pepero Day is one). The D# logo stays lime. */
+body:not(.playing){background:radial-gradient(120% 60% at 50% 0%,#3d2224 0%,#1c1213 55%,var(--color-bg) 100%) fixed,var(--color-bg)}
+.lobby-stick{display:block;width:min(100%,360px);height:auto;margin:20px 0 22px;transform:rotate(-4deg);filter:drop-shadow(0 10px 14px #0009)}
+#lobby{padding-top:8px}
+#lobby .dopa-label{color:#ff9fbb}
+#lobby h1 .pink{color:var(--color-pink)}
+#lobby .steps li::before{color:var(--color-pink)}
+#lobby .mode-buttons .dopa-button:not(.dopa-button--secondary){background:var(--color-pink);color:#2a0b16}
+#lobby .mode-buttons .dopa-button:not(.dopa-button--secondary):hover{background:#ff86a6}
+#lobby .mode-buttons .dopa-button small{opacity:.8}
+.connection-spinner{border-top-color:var(--color-pink)}
+#connecting-overlay{background:radial-gradient(120% 60% at 50% 0%,#3d2224 0%,#1c1213 55%,var(--color-bg) 100%)}
+#notice{background:#3d2224;border:1px solid #ffffff1f}
+#countdown-number{color:#b5545f}
+@media (prefers-reduced-motion:no-preference){.lobby-stick{animation:stick-in var(--duration-slow) var(--ease-standard) both .1s}}
+@keyframes stick-in{from{opacity:0;transform:translateX(-24px) rotate(-8deg)}}
