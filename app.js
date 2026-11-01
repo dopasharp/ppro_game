@@ -57,7 +57,7 @@ function syncSeatCards(){
     button.setAttribute('aria-label',`${name}님의 ${seat==='left'?'왼쪽':'오른쪽'} 방 링크 복사`);
   }
 }
-function showGame(){setConnecting(!connected);closeShareMenu(); document.body.classList.add('playing');$('lobby').hidden=true;$('game').hidden=false;resize(); }
+function showGame(){window.DopaSharp?.track('game_start',{mode:room?.mode});setConnecting(!connected);closeShareMenu(); document.body.classList.add('playing');$('lobby').hidden=true;$('game').hidden=false;resize(); }
 function resize(){const bounds=$('stage').getBoundingClientRect(),w=bounds.width||window.innerWidth,h=bounds.height||window.innerHeight;const dpr=Math.min(devicePixelRatio||1,3);canvas.style.width='100%';canvas.style.height='100%';canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}
 addEventListener('resize',resize);window.visualViewport?.addEventListener('resize',resize);new ResizeObserver(resize).observe($('stage'));$('scale').oninput=resize;
 let activeAuthSession=null,infoStops=[];
@@ -344,7 +344,7 @@ let lastStatus='';function frame(t){
   wallEdge=nextWall;
   if(!cameraReady){cameraX=side==='left'?0:WIDTH;cameraReady=true;}
   cameraX=advanceCamera(cameraX,scene,side,room?.mode,t-lastFrame);lastFrame=t;
-  if(!scene.done)finishAt=0;else if(!finishAt){finishAt=t;notify('붙어서 함께 이동해요! 계속 탭해주세요 ♥');}
+  if(!scene.done)finishAt=0;else if(!finishAt){finishAt=t;notify('붙어서 함께 이동해요! 계속 탭해주세요 ♥');if(!demo)window.DopaSharp?.track('game_complete',{mode:room?.mode});}
   const {sceneWidth,view,scale,offsetY}=viewportLayout(canvas.width,canvas.height,side,room?.mode,cameraX,scene);
   ctx.setTransform(1,0,0,1,0,0);const backdrop=ctx.createLinearGradient(0,0,0,canvas.height);backdrop.addColorStop(0,'#cfe9f7');backdrop.addColorStop(.65,'#f7f5e9');backdrop.addColorStop(1,'#f6f0df');ctx.fillStyle=backdrop;ctx.fillRect(0,0,canvas.width,canvas.height);
   ctx.setTransform(scale,0,0,scale,0,offsetY);world(ctx,view,sceneWidth,t);if($('overview').parentElement.open)world(overview,0,780,t);

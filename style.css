@@ -56,3 +56,36 @@ body.connecting{overflow:hidden}
 .connection-spinner{width:34px;height:34px;border:3px solid #cfe4ec;border-top-color:#82afbf;border-radius:50%;margin-bottom:10px;animation:connecting-spin .9s linear infinite}
 @keyframes connecting-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.connection-spinner{animation:none}}
+
+
+/* DOPA# frame: the lobby and connection screens wear the brand; the play screen keeps the pepero sky. */
+body:not(.playing){background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)}
+body:not(.playing) main{max-width:480px;padding:0 20px}
+body:not(.playing) header{padding:max(12px,env(safe-area-inset-top)) 0 0}
+body:not(.playing) header>[data-dopa]{flex:1}
+body:not(.playing) #connection{color:var(--color-text-muted)}
+#lobby{padding:40px 0 0;text-align:left}
+#lobby .dopa-label{margin:0;color:var(--color-pink)}
+#lobby h1{margin:10px 0 0;font:800 var(--text-h1)/var(--leading-tight) var(--font-body);letter-spacing:-.02em}
+#lobby .lead{margin:12px 0 18px;font-size:var(--text-body);line-height:var(--leading-body);color:var(--color-text-muted)}
+#lobby .steps{list-style:none;counter-reset:step;margin:0;padding:0;display:grid;gap:8px}
+#lobby .steps li{counter-increment:step;display:grid;grid-template-columns:24px 1fr;gap:10px;font-size:15px;line-height:1.5;color:#d9dcd8}
+#lobby .steps li::before{content:counter(step);display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--color-surface-raised);color:var(--color-pink);font:800 12px/1 var(--font-body)}
+#lobby .initials label,#lobby .meeting-label{color:var(--color-text-muted);font-size:var(--text-small)}
+#lobby .initials-help{color:var(--color-text-muted);font-size:13px}
+#lobby .initials input,#lobby #meeting-message{min-height:var(--button-height);padding:12px 14px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:var(--color-surface);color:var(--color-text)}
+#lobby input::placeholder{color:#7d8781}
+#lobby input:focus-visible{outline:3px solid var(--color-pink);outline-offset:1px}
+#lobby .mode-buttons{margin:24px 0 0}
+#lobby .mode-buttons .dopa-button{flex:1;flex-direction:column;gap:2px;min-height:60px;padding:10px 12px;border-radius:var(--radius-md)}
+#lobby .mode-buttons .dopa-button:not(.dopa-button--secondary){background:var(--color-brand);border-color:transparent;color:var(--color-on-brand)}
+#lobby .mode-buttons .dopa-button:not(.dopa-button--secondary):hover{background:var(--color-brand-hover)}
+#lobby .mode-buttons .dopa-button--secondary{background:transparent;border-color:var(--color-border);color:var(--color-text)}
+#lobby .mode-buttons .dopa-button--secondary:hover{background:#ffffff0f}
+body:not(.playing) #error{background:#ff77771a;color:var(--color-error);border-radius:var(--radius-md)}
+button:focus-visible{outline:3px solid currentColor;outline-offset:2px}
+#connecting-overlay{background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)}
+#connecting-overlay p{color:var(--color-text-muted)}
+.connection-spinner{border-color:var(--color-border);border-top-color:var(--color-brand)}
+body:not(.playing) header .dopa-label,body:not(.playing) header [data-dopa-more]{white-space:nowrap}
+body:not(.playing) header [data-dopa-more]{padding-inline:4px}
