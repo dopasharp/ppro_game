@@ -2,12 +2,13 @@ import {roomStatus} from './room-status.js?v=46';
 import {signInWithRetry} from './firebase-session.js?v=35';
 import {roomLink,requestedSeat,authSession,seatAction,resumeSeat,lobbyLink} from './room-links.js?v=45';
 import {writeLink} from './clipboard.js?v=23';
+import * as S from './sound.js?v=1';
 import {firebaseConfig,emulatorPorts} from './firebase-config.js';
 import {WIDTH,HEIGHT,TOTAL,state,canTap,advanceCamera,resetRound,bitePose,MIN_MEETING,MAX_MEETING,viewportLayout,roadLayout,countdownText} from './game.js?v=39';
 const $=id=>document.getElementById(id), canvas=$('canvas'),ctx=canvas.getContext('2d'),overview=$('overview').getContext('2d');
 let demoStarted=false,cameraX=0,cameraReady=false,lastFrame=0,finishAt=0,observedRound=null,resetBusy=false;
 let room=null,side='left',uid,db,api,connected=false,offset=0,busy=false,unsub=null,roomId=null,demo=false,lastInput=0,startBusy=false;
-let spriteMeta={},spriteLoadError=null;
+let spriteMeta={},spriteLoadError=null,heardTaps=null;
 const spritesReady=fetch(new URL('./assets/sprites.json',import.meta.url)).then(r=>{if(!r.ok)throw new Error('이미지를 불러오지 못했어요.');return r.json();}).then(meta=>{spriteMeta=meta;}).catch(e=>{spriteLoadError=e;});
 const images={};for(const name of ['cream','pink','pepero']){const i=new Image();i.src=`./assets/${name}.png`;i.onerror=()=>error(`이미지 로딩 실패: ${name}`);images[name]=i;}
 const animation={left:{taps:0,at:-Infinity},right:{taps:0,at:-Infinity}};
@@ -17,9 +18,21 @@ let noticeTimer;
 let seatKeys=null,controlsSeat=true,roomLoaded=false,seenOpponent=false,enterGeneration=0;
 function currentStatus(){return roomStatus({room,side,loaded:roomLoaded,connected,controlsSeat,seenOpponent,now:now()});}
 let wallEdge=null,wallUntil=0;
-function notify(message){clearTimeout(noticeTimer);$('notice').textContent=message;$('notice').hidden=false;noticeTimer=setTimeout(()=>$('notice').hidden=true,5000);}
+function notify(message,quiet=false){clearTimeout(noticeTimer);$('notice').textContent=message;$('notice').classList.toggle('quiet',quiet);$('notice').hidden=false;noticeTimer=setTimeout(()=>$('notice').hidden=true,quiet?1800:5000);}
 function copiedNotice(copied){notify(copied?'링크가 복사되었습니다. 상대에게 공유해주세요!':'브라우저에서 복사를 허용하지 않았어요. 하단의 해당 자리 링크 복사 버튼을 눌러주세요.');}
 function invitationURL(id=roomId,seat='right'){return roomLink(location.href,id,seat,seatKeys?.[seat]);}
+// QR: 상대 자리 링크를 담아요. 방을 만들면 상대가 들어올 때까지 자동으로 띄워요.
+let qrFor='',qrAuto=false;
+const partnerSeat=()=>side==='left'?'right':'left';
+function showQr(auto=false){
+  const seat=partnerSeat(),url=invitationURL(roomId,seat);
+  if(qrFor!==url){qrFor=url;$('qr').innerHTML='';
+    if(window.QRCode)new QRCode($('qr'),{text:url,width:440,height:440,correctLevel:QRCode.CorrectLevel.M});
+    else{$('qr').textContent='QR을 불러오지 못했어요. 링크 복사로 초대해주세요.';qrFor='';}}
+  $('qr-seat').textContent=`${seat==='left'?'왼쪽':'오른쪽'} 자리 · ${room?.initials?.[seat]||'상대'}`;
+  qrAuto=auto;closeShareMenu();$('qr-overlay').hidden=false;
+}
+function closeQr(){qrAuto=false;$('qr-overlay').hidden=true;}
 function closeShareMenu(){ $('seat-links').hidden=true;$('share-menu').setAttribute('aria-expanded','false'); }
 async function copyInvite(seat='right'){const copied=await writeLink(invitationURL(roomId,seat));if(copied)closeShareMenu();if(copied)notify(`${seat==='left'?'왼쪽':'오른쪽'} 링크가 복사되었습니다.${seat==='right'?' 상대에게 공유해주세요!':' 내 자리로 돌아올 때 사용해주세요.'}`);else copiedNotice(false);}
 function createRoom(mode){
@@ -96,8 +109,8 @@ async function enter(id,create=false,mode='remote',copying=null){
     seenOpponent=!!room[side==='left'?'right':'left'];syncSeatCards();
     history.replaceState(null,'',selectedSeat?invitationURL(roomId,side):`${location.pathname}${location.search}#${roomId}`);showGame();
     $('share').hidden=false;$('share-left').hidden=false;
-    if(create){copiedNotice(copying?await copying:await writeLink(invitationURL()));}
-    if(unsub)unsub();unsub=api.onValue(roomRef(),snapshot=>{if(generation!==enterGeneration)return;room=snapshot.val();if(!room){connectionFailed(new Error('방이 삭제되었어요.'));return;}const assignedSide=selectedSeat||(room.left.uid===uid?'left':'right');if(assignedSide!==side)cameraReady=false;side=assignedSide;controlsSeat=room[side]?.uid===uid;roomLoaded=true;seenOpponent=seenOpponent||!!room[side==='left'?'right':'left'];syncSeatCards();
+    if(create){copiedNotice(copying?await copying:await writeLink(invitationURL()));showQr(true);}
+    if(unsub)unsub();unsub=api.onValue(roomRef(),snapshot=>{if(generation!==enterGeneration)return;room=snapshot.val();if(!room){connectionFailed(new Error('방이 삭제되었어요.'));return;}const assignedSide=selectedSeat||(room.left.uid===uid?'left':'right');if(assignedSide!==side)cameraReady=false;side=assignedSide;controlsSeat=room[side]?.uid===uid;roomLoaded=true;seenOpponent=seenOpponent||!!room[side==='left'?'right':'left'];syncSeatCards();if(qrAuto&&room[partnerSeat()])closeQr();
       if(controlsSeat&&room.right&&!room.startAt&&!startBusy){startBusy=true;api.runTransaction(roomRef('startAt'),v=>v??api.serverTimestamp(),{applyLocally:false}).catch(error).finally(()=>startBusy=false);}
     },e=>{if(generation===enterGeneration)connectionFailed(e);});
   }catch(e){if(generation===enterGeneration)connectionFailed(e);}finally{for(const id of ['create-together','create-remote'])$(id).disabled=false;}
@@ -105,7 +118,7 @@ async function enter(id,create=false,mode='remote',copying=null){
 function newRoom(){const bytes=crypto.getRandomValues(new Uint8Array(16));return [...bytes].map(x=>x.toString(16).padStart(2,'0')).join('');}
 $('create-together').onclick=()=>createRoom('together');
 $('create-remote').onclick=()=>createRoom('remote');
-function resetPresentation(){wallEdge=null;wallUntil=0;cameraReady=false;finishAt=0;lastInput=0;demoStarted=false;for(const a of Object.values(animation)){a.taps=0;a.at=-Infinity;}}
+function resetPresentation(){heardTaps=null;wallEdge=null;wallUntil=0;cameraReady=false;finishAt=0;lastInput=0;demoStarted=false;for(const a of Object.values(animation)){a.taps=0;a.at=-Infinity;}}
 $('new').onclick=async()=>{
   if(!room||resetBusy||(!demo&&!controlsSeat))return;clearError();
   if(demo){room=resetRound(room,now());resetPresentation();return;}
@@ -126,7 +139,7 @@ function returnToLobby(){
   room=null;roomId=null;seatKeys=null;roomLoaded=false;seenOpponent=false;controlsSeat=false;connected=false;
   busy=false;resetBusy=false;startBusy=false;observedRound=null;side='left';demo=false;
   resetPresentation();lastStatus='';lastCountdown='';
-  clearError();clearTimeout(noticeTimer);$('notice').hidden=true;$('countdown').hidden=true;
+  clearError();clearTimeout(noticeTimer);$('notice').hidden=true;$('countdown').hidden=true;closeQr();
   $('game').hidden=true;$('lobby').hidden=false;document.body.classList.remove('playing');
   setConnecting(false);$('connection').textContent='';$('new').disabled=false;
   history.replaceState(null,'',lobbyLink(location.href));
@@ -138,15 +151,19 @@ $('share-menu').onclick=()=>{
   $('share-menu').setAttribute('aria-expanded',String(opening));
 };
 document.addEventListener('pointerdown',event=>{if(!$('seat-links').contains(event.target)&&!$('share-menu').contains(event.target))closeShareMenu();});
-document.addEventListener('keydown',event=>{if(event.key==='Escape')closeShareMenu();});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'){closeShareMenu();closeQr();}});
 $('share').onclick=()=>copyInvite('right');
 $('share-left').onclick=()=>copyInvite('left');
+$('show-qr').onclick=()=>showQr();
+$('qr-close').onclick=closeQr;
+$('qr-copy').onclick=()=>copyInvite(partnerSeat());
+$('qr-overlay').onclick=e=>{if(e.target===$('qr-overlay'))closeQr();};
 
 setInterval(()=>{if(demo&&demoStarted&&canTap({...room,startAt:room.startAt+3000},now())){const position=state(room.left.taps,room.right.taps);if(!position.done||position.meeting>MIN_MEETING)room.right.taps++;}},280);
 async function tap(){
   if(!room||!connected||busy||now()-lastInput<65)return;
   lastInput=now();
-  if(demo){if(canTap({...room,startAt:room.startAt?room.startAt+3000:null},now())){demoStarted=true;room.left.taps++;}return;}
+  if(demo){if(canTap({...room,startAt:room.startAt?room.startAt+3000:null},now())){demoStarted=true;room.left.taps++;S.myStep();}return;}
   const seat=side,activeRoom=roomId,generation=enterGeneration;
   busy=true;
   try{
@@ -165,12 +182,15 @@ async function tap(){
     }
     if(!canTap({...room,startAt:room.startAt?room.startAt+3000:null},now()))return;
     const position=state(room.left?.taps,room.right?.taps);
-    if(position.done&&((seat==='left'&&position.meeting>=MAX_MEETING)||(seat==='right'&&position.meeting<=MIN_MEETING))){wallUntil=now()+1500;return;}
+    if(position.done&&((seat==='left'&&position.meeting>=MAX_MEETING)||(seat==='right'&&position.meeting<=MIN_MEETING))){wallUntil=now()+1500;S.bump();return;}
     const expectedRound=room.round??0,fallback=room[seat];
+    S.myStep();
     await api.runTransaction(roomRef(seat),p=>{const current=p??fallback;return current?.uid===uid&&(current.round??0)===expectedRound?{...current,taps:current.taps+1,lastTap:api.serverTimestamp()}:undefined;},{applyLocally:false});
   }catch(e){if(generation===enterGeneration)error(e);}finally{if(generation===enterGeneration)busy=false;}
 }
 
+// 첫 터치에서 오디오를 깨워요. 터치 기기는 pointerup/touchend가 사용자 동작으로 인정돼요.
+for(const type of ['pointerdown','pointerup','touchend','keydown'])addEventListener(type,()=>S.unlockAudio(),{capture:true,passive:true});
 canvas.addEventListener('pointerdown',e=>{e.preventDefault();canvas.focus();tap();});canvas.addEventListener('keydown',e=>{if((e.key===' '||e.key==='Enter')&&!e.repeat){e.preventDefault();tap();}});
 function circle(c,x,y,r,fill){c.fillStyle=fill;c.beginPath();c.arc(x,y,r,0,Math.PI*2);c.fill();}
 function bear(c,name,x,flip,frame,row){
@@ -277,6 +297,14 @@ function world(c,view,width,t){
   }
   pepero(c,s,l,r);
   const animationTime=now(),leftPose=pose('left',l,animationTime),rightPose=pose('right',r,animationTime);
+  // 걸음마다 발밑에 몽글몽글 먼지, 상대 곰 위에는 작은 음표
+  for(const [seat,x,dir] of [['left',s.leftX,-1],['right',s.rightX,1]]){
+    const age=(animationTime-animation[seat].at)/450;if(age<0||age>=1)continue;
+    c.save();c.globalAlpha=(1-age)*.75;
+    for(let i=0;i<3;i++)circle(c,x+dir*(46+i*11+age*18),545-(i%2)*6-age*10,(3.5+i*1.5)*(.8+age*.6),i%2?'#f6d3da':'#fff6ef');
+    if(seat!==side){c.fillStyle=seat==='left'?'#c2848f':'#9d8ac4';c.font='bold 18px sans-serif';c.textAlign='center';c.fillText(animation[seat].taps%2?'♪':'♫',x+dir*14,392-age*26);}
+    c.restore();
+  }
   bear(c,'cream',s.leftX,false,leftPose.frame,leftPose.row);
   bear(c,'pink',s.rightX,true,rightPose.frame,rightPose.row);
   for(const [seat,x] of [['left',s.leftX],['right',s.rightX]]){
@@ -342,12 +370,13 @@ let lastCountdown='';
 let lastStatus='';function frame(t){
   if(room&&observedRound!==(room.round??0)){observedRound=room.round??0;resetPresentation();}
   const scene=state(room?.left?.taps,room?.right?.taps);
+  if(room){const partner=side==='left'?'right':'left',taps=room[partner]?.taps||0;if(heardTaps!==null&&taps>heardTaps)S.partnerStep(scene.progress,partner==='right');heardTaps=taps;}
   const nextWall=scene.done?(scene.meeting<=MIN_MEETING?'left':scene.meeting>=MAX_MEETING?'right':null):null;
   if(nextWall&&nextWall!==wallEdge)wallUntil=now()+1800;
   wallEdge=nextWall;
   if(!cameraReady){cameraX=side==='left'?0:WIDTH;cameraReady=true;}
   cameraX=advanceCamera(cameraX,scene,side,room?.mode,t-lastFrame);lastFrame=t;
-  if(!scene.done)finishAt=0;else if(!finishAt){finishAt=t;notify('붙어서 함께 이동해요! 계속 탭해주세요 ♥');if(!demo)window.DopaSharp?.track('game_complete',{mode:room?.mode});}
+  if(!scene.done)finishAt=0;else if(!finishAt){finishAt=t;notify('계속 탭하면 함께 이동해요 ♥',true);S.meet();if(!demo)window.DopaSharp?.track('game_complete',{mode:room?.mode});}
   const {sceneWidth,view,scale,offsetY}=viewportLayout(canvas.width,canvas.height,side,room?.mode,cameraX,scene);
   ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=SKY_TOP;ctx.fillRect(0,0,canvas.width,Math.ceil(offsetY)+1);ctx.fillStyle=GROUND_BOTTOM;ctx.fillRect(0,Math.floor(offsetY+HEIGHT*scale)-1,canvas.width,canvas.height);
   ctx.setTransform(scale,0,0,scale,0,offsetY);world(ctx,view,sceneWidth,t);if($('overview').parentElement.open)world(overview,0,780,t);
@@ -359,7 +388,9 @@ let lastStatus='';function frame(t){
     if(counting&&countText!==lastCountdown){
       $('countdown-number').textContent=countText;
       $('countdown-number').animate([{transform:'scale(.65)',opacity:.3},{transform:'scale(1.12)',opacity:1,offset:.65},{transform:'scale(1)',opacity:1}],{duration:420,easing:'ease-out'});
+      S.tick();
     }
+    if(lastCountdown&&!counting&&now()-room.startAt>=3000)S.go();
     lastCountdown=counting?countText:'';
     const text=currentStatus();if(text!==lastStatus){$('status').textContent=text;lastStatus=text;}}else if(!roomLoaded){const text=currentStatus();if(text!==lastStatus){$('status').textContent=text;lastStatus=text;}}
   requestAnimationFrame(frame);

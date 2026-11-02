@@ -108,3 +108,19 @@ body:not(.playing){background:radial-gradient(120% 60% at 50% 0%,#3d2224 0%,#1c1
 #countdown-number{color:#b5545f}
 @media (prefers-reduced-motion:no-preference){.lobby-stick{animation:stick-in var(--duration-slow) var(--ease-standard) both .1s}}
 @keyframes stick-in{from{opacity:0;transform:translateX(-24px) rotate(-8deg)}}
+#lobby .sound-note{margin:20px 0 0;color:var(--color-text-muted);font-size:13px}
+/* 만났을 때 안내는 작고 짧게: 살짝 떴다가 사라져요 */
+#notice.quiet{width:auto;max-width:min(90vw,390px);padding:7px 14px;border:0;border-radius:99px;background:#ffffffb8;color:#a45b69;font-size:12px;font-weight:600;line-height:1.4;box-shadow:none;white-space:nowrap;animation:notice-fade 1.8s ease forwards}
+@keyframes notice-fade{0%{opacity:0;transform:translate(-50%,6px)}12%,75%{opacity:1;transform:translate(-50%,0)}100%{opacity:0;transform:translate(-50%,0)}}
+/* QR 초대 */
+.seat-links{flex-wrap:wrap}
+.qr-button{flex-basis:100%;min-height:40px;font-size:13px;font-weight:700;background:#fff0f3;border-color:#ecc3cd;color:#a45b69}
+.qr-overlay{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;padding:24px;background:#2a0b16b3;backdrop-filter:blur(4px)}
+.qr-dialog{width:min(100%,360px);padding:24px 22px 18px;border-radius:24px;background:#fffaf5;color:#5e3b40;text-align:center;box-shadow:0 20px 60px #2a0b1666}
+.qr-dialog .dopa-label{margin:0;color:#c0567a}
+.qr-dialog h2{margin:8px 0 16px;font-size:20px;line-height:1.4;color:#5e3b40}
+.qr{width:min(220px,60vw);aspect-ratio:1;margin:0 auto;padding:12px;background:#fff;border:1px solid #f0d6dc;border-radius:16px}
+.qr img,.qr canvas{display:block;width:100%!important;height:auto!important}
+.qr-seat{margin:12px 0 14px;font-size:13px;color:#9d8173}
+.qr-dialog #qr-copy{background:var(--color-pink);color:#2a0b16;border-color:transparent}
+.qr-dialog #qr-close{margin-top:6px;color:#9d8173}
