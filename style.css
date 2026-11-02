@@ -58,7 +58,7 @@ body.connecting{overflow:hidden}
 @media(prefers-reduced-motion:reduce){.connection-spinner{animation:none}}
 
 
-/* DOPA# frame: the lobby and connection screens wear the brand; the play screen keeps the pepero sky. */
+/* 도파# frame: the lobby and connection screens wear the brand; the play screen keeps the pepero sky. */
 body:not(.playing){background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)}
 body:not(.playing) main{max-width:480px;padding:0 20px}
 body:not(.playing) header{padding:max(12px,env(safe-area-inset-top)) 0 0}
@@ -92,7 +92,7 @@ body:not(.playing) header [data-dopa-more]{padding-inline:4px}
 
 
 /* Pepero frame: chocolate-dark lobby with one strawberry stick; pink only on the label, the name and the main action
-   (DOPA# guide: pink marks events and special content, and Pepero Day is one). The D# logo stays lime. */
+   (도파# guide: pink marks events and special content, and Pepero Day is one). The D# logo stays lime. */
 body:not(.playing){background:radial-gradient(120% 60% at 50% 0%,#3d2224 0%,#1c1213 55%,var(--color-bg) 100%) fixed,var(--color-bg)}
 .lobby-stick{display:block;width:min(100%,360px);height:auto;margin:20px 0 22px;transform:rotate(-4deg);filter:drop-shadow(0 10px 14px #0009)}
 #lobby{padding-top:8px}
